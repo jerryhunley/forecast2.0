@@ -1,4 +1,3 @@
-```python
 # utils/scoring.py
 import streamlit as st
 import pandas as pd
@@ -88,4 +87,3 @@ def score_performance_groups(_performance_metrics_df, weights, group_col_name):
 
 def score_sites(_site_metrics_df, weights):
     return score_performance_groups(_site_metrics_df, weights, group_col_name="Site")
-```
