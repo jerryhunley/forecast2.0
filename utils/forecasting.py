@@ -1,4 +1,3 @@
-```python
 # utils/forecasting.py
 import streamlit as st
 import pandas as pd
@@ -1045,4 +1044,3 @@ def generate_funnel_narrative(in_flight_df, ordered_stages, conversion_rates, in
         narrative_steps.append(step_data)
 
     return narrative_steps
-```
