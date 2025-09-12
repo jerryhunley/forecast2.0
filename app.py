@@ -3,6 +3,9 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import io
+import os  # <-- ADD THIS LINE
+
+st.write(os.listdir('.')) # <-- AND ADD THIS LINE
 
 # --- Utility and Constant Imports ---
 from utils.parsing import parse_funnel_definition
