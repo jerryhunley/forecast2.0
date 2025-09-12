@@ -874,7 +874,6 @@ def calculate_pipeline_projection(
     if _processed_df is None or _processed_df.empty:
         return default_return
 
-    # --- 1. Define TRUE Terminal Stages & Filter for In-Flight Leads ---
     true_terminal_stages = [s for s in [STAGE_ENROLLED, STAGE_SCREEN_FAILED, STAGE_LOST] if s in ts_col_map]
     true_terminal_ts_cols = [ts_col_map.get(s) for s in true_terminal_stages]
     in_flight_df = _processed_df.copy()
@@ -885,7 +884,6 @@ def calculate_pipeline_projection(
         st.info("Funnel Analysis: No leads are currently in-flight.")
         return default_return
 
-    # --- 2. Determine Current Stage ---
     def get_current_stage(row, ordered_stages, ts_col_map):
         last_stage, last_ts = None, pd.NaT
         for stage in ordered_stages:
@@ -899,8 +897,7 @@ def calculate_pipeline_projection(
         lambda row: get_current_stage(row, ordered_stages, ts_col_map), axis=1, result_type='expand'
     )
     in_flight_df.dropna(subset=['current_stage'], inplace=True)
-
-    # --- 3. Create the Master Pool of ALL In-Flight ICFs (Existing and Projected) ---
+    
     all_icfs_to_project = []
     ts_icf_col = ts_col_map.get(STAGE_SIGNED_ICF)
     if ts_icf_col in in_flight_df.columns:
@@ -913,6 +910,7 @@ def calculate_pipeline_projection(
         
     for _, row in leads_before_icf.iterrows():
         prob_to_icf, lags_to_icf_list, path_found = 1.0, [], False
+        if row['current_stage'] not in ordered_stages: continue
         start_index = ordered_stages.index(row['current_stage'])
         for i in range(start_index, len(ordered_stages) - 1):
             from_stage, to_stage = ordered_stages[i], ordered_stages[i+1]
@@ -923,7 +921,6 @@ def calculate_pipeline_projection(
             total_lag_to_icf = np.nansum(lags_to_icf_list)
             all_icfs_to_project.append({'prob': prob_to_icf, 'lag_to_icf': total_lag_to_icf, 'start_date': row['current_stage_ts']})
 
-    # --- 4. Project Enrollments from the Master Pool of ICFs ---
     projected_enrollments = []
     icf_to_enroll_rate = conversion_rates.get(f"{STAGE_SIGNED_ICF} -> {STAGE_ENROLLED}", 0.0)
     icf_to_enroll_lag = inter_stage_lags.get(f"{STAGE_SIGNED_ICF} -> {STAGE_ENROLLED}", 0.0)
@@ -934,14 +931,12 @@ def calculate_pipeline_projection(
         if pd.isna(icf_landing_date): continue
         projected_enrollments.append({'prob': icf['prob'] * icf_to_enroll_rate, 'lag': icf_to_enroll_lag, 'start_date': icf_landing_date})
 
-    # --- 5. Calculate TOTAL THEORETICAL YIELD (the true number) ---
     total_icf_yield = sum(p['prob'] for p in all_icfs_to_project)
     total_enroll_yield = sum(p['prob'] for p in projected_enrollments)
 
-    # --- 6. Dynamically size the results dataframe for FUTURE projections ---
     all_landing_dates = [p['start_date'] + pd.to_timedelta(p['lag_to_icf'], 'D') for p in all_icfs_to_project if pd.notna(p.get('start_date')) and pd.notna(p.get('lag_to_icf'))]
     all_landing_dates.extend([p['start_date'] + pd.to_timedelta(p['lag'], 'D') for p in projected_enrollments if pd.notna(p.get('start_date')) and pd.notna(p.get('lag'))])
-
+    
     proj_start_month = pd.Period(datetime.now(), 'M')
     valid_dates = [d for d in all_landing_dates if pd.notna(d)]
     if not valid_dates:
@@ -950,10 +945,9 @@ def calculate_pipeline_projection(
         max_date = max(valid_dates)
         proj_end_month = max(pd.Period(max_date, 'M'), proj_start_month)
         future_months = pd.period_range(start=proj_start_month, end=proj_end_month, freq='M')
-
+    
     results_df = pd.DataFrame(0.0, index=future_months, columns=['Projected_ICF_Landed', 'Projected_Enrollments_Landed'])
 
-    # --- 7. Aggregate and Smear Projections into the FUTURE table ---
     def smear_projection(df, projections_list, lag_col_name, target_col):
         for proj in projections_list:
             if proj['prob'] <= 0 or pd.isna(proj['start_date']) or pd.isna(proj[lag_col_name]): continue
@@ -969,7 +963,7 @@ def calculate_pipeline_projection(
     results_df['Projected_ICF_Landed'] = results_df['Projected_ICF_Landed'].round(0).astype(int)
     results_df['Cumulative_ICF_Landed'] = results_df['Projected_ICF_Landed'].cumsum()
     results_df['Projected_Enrollments_Landed'] = results_df['Projected_Enrollments_Landed'].round(0).astype(int)
-    results_df['Cumulative_Enrollments_Landed'] = results_df['Cumulative_Enrollments_Landed'].cumsum()
+    results_df['Cumulative_Enrollments_Landed'] = results_df['Projected_Enrollments_Landed'].cumsum()
 
     return {
         'results_df': results_df,
