@@ -5,7 +5,7 @@ from datetime import datetime
 import io
 import os
 
-# --- Utility and Constant Imports ---
+# --- CORRECTED DIRECT IMPORTS ---
 from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
@@ -52,7 +52,7 @@ for key in required_keys:
 # --- Sidebar for Global Settings and Uploads ---
 with st.sidebar:
     st.header("⚙️ Setup")
-
+    # ... (The rest of the sidebar code is fine, no changes needed here) ...
     st.warning("🔒 **Privacy Notice:** Do not upload files containing PII.", icon="⚠️")
     pii_checkbox = st.checkbox("I confirm my files do not contain PII.")
 
@@ -110,8 +110,9 @@ with st.sidebar:
         total_weight = sum(abs(w) for w in weights.values())
         st.session_state.weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
 
-    st.divider()
 
+    st.divider()
+    
     with st.expander("Projection & AI Assumptions"):
         st.subheader("General Settings")
         st.session_state.proj_horizon = st.number_input("Projection Horizon (Months)", 1, 48, 12)
@@ -153,7 +154,10 @@ if uploaded_referral_file and uploaded_funnel_def_file:
     if st.button("Process Uploaded Data", type="primary"):
         with st.spinner("Parsing files and processing data... This may take a moment."):
             try:
+                # --- CORRECTED FILE HANDLING LOGIC ---
                 referral_bytes_data = uploaded_referral_file.getvalue()
+
+                # PII Check using the byte data in memory
                 header_df = pd.read_csv(io.BytesIO(referral_bytes_data), nrows=0, low_memory=False)
                 pii_cols = [c for c in ["notes", "first name", "last name", "name", "phone", "email"] if c in [str(h).lower().strip() for h in header_df.columns]]
 
@@ -165,6 +169,7 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                 funnel_def, ordered_st, ts_map = parse_funnel_definition(uploaded_funnel_def_file)
                 
                 if funnel_def and ordered_st and ts_map:
+                    # Use the same in-memory byte data for the main read
                     raw_df = pd.read_csv(io.BytesIO(referral_bytes_data))
                     processed_data = preprocess_referral_data(raw_df, funnel_def, ordered_st, ts_map)
 
@@ -184,6 +189,7 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                     st.error("Funnel definition parsing failed. Please check the funnel file.")
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
+                st.exception(e) # Also print the full traceback for better debugging
 
 # --- Instructions for the User ---
 if st.session_state.data_processed_successfully:
