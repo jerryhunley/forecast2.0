@@ -161,20 +161,25 @@ if uploaded_referral_file and uploaded_funnel_def_file:
     if st.button("Process Uploaded Data", type="primary"):
         with st.spinner("Parsing files and processing data... This may take a moment."):
             try:
-                # PII Check
-                bytes_data = uploaded_referral_file.getvalue()
-                header_df = pd.read_csv(io.BytesIO(bytes_data), nrows=0)
-                pii_cols = [c for c in ["notes", "first name", "last name", "name", "phone", "email"] if c in [str(h).lower() for h in header_df.columns]]
+                # --- CORRECTED FILE HANDLING ---
+                # Read the file into memory ONCE.
+                referral_bytes_data = uploaded_referral_file.getvalue()
+
+                # PII Check using the byte data
+                header_df = pd.read_csv(io.BytesIO(referral_bytes_data), nrows=0, low_memory=False)
+                pii_cols = [c for c in ["notes", "first name", "last name", "name", "phone", "email"] if c in [str(h).lower().strip() for h in header_df.columns]]
+
                 if pii_cols:
-                    st.error(f"PII Detected in columns: {', '.join(pii_cols)}. Please remove them and re-upload.", icon="🚫")
+                    original_col_names = [col for col in header_df.columns if str(col).lower().strip() in pii_cols]
+                    st.error(f"PII Detected in columns: {', '.join(original_col_names)}. Please remove them and re-upload.", icon="🚫")
                     st.stop()
                 
                 # If PII check passes, proceed with processing
-                uploaded_referral_file.seek(0) # Reset file pointer after header read
                 funnel_def, ordered_st, ts_map = parse_funnel_definition(uploaded_funnel_def_file)
                 
                 if funnel_def and ordered_st and ts_map:
-                    raw_df = pd.read_csv(uploaded_referral_file)
+                    # Use the same byte data again for the main read. No need to touch the uploader object.
+                    raw_df = pd.read_csv(io.BytesIO(referral_bytes_data))
                     processed_data = preprocess_referral_data(raw_df, funnel_def, ordered_st, ts_map)
 
                     if processed_data is not None and not processed_data.empty:
@@ -189,7 +194,7 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                         st.success("Data processed successfully!")
                         st.rerun() # Rerun to update the UI status
                     else:
-                        st.error("Data processing failed. Please check the file contents and format.")
+                        st.error("Data processing failed after preprocessing. Please check the referral file contents and format.")
                 else:
                     st.error("Funnel definition parsing failed. Please check the funnel file.")
             except Exception as e:
