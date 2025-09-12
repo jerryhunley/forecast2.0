@@ -1,4 +1,3 @@
-```python
 # utils/parsing.py
 import streamlit as st
 import pandas as pd
@@ -78,4 +77,3 @@ def parse_history_string(history_str):
     except TypeError:
         pass
     return parsed_events
-```
