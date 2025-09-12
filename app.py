@@ -4,13 +4,6 @@ import pandas as pd
 from datetime import datetime
 import io
 import os
-import sys
-
-# --- THIS IS THE FIX ---
-# Add the project's root directory to the Python path.
-# This ensures that Python can find the 'utils' and 'pages' modules.
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-# --------------------
 
 # --- Utility and Constant Imports ---
 from utils.parsing import parse_funnel_definition
