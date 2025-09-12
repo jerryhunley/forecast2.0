@@ -1,4 +1,3 @@
-```python
 # utils/processing.py
 import streamlit as st
 import pandas as pd
@@ -99,4 +98,3 @@ def preprocess_referral_data(_df_raw, funnel_def, ordered_stages, ts_col_map):
     if "UTM Medium" not in df.columns: df["UTM Medium"] = np.nan
 
     return df
-```
