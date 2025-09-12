@@ -3,9 +3,14 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import io
-import os  # <-- ADD THIS LINE
+import os
+import sys
 
-st.write(os.listdir('.')) # <-- AND ADD THIS LINE
+# --- THIS IS THE FIX ---
+# Add the project's root directory to the Python path.
+# This ensures that Python can find the 'utils' and 'pages' modules.
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# --------------------
 
 # --- Utility and Constant Imports ---
 from utils.parsing import parse_funnel_definition
@@ -24,8 +29,6 @@ st.title("📊 Recruitment Forecasting Tool")
 st.header("Home & Data Setup")
 
 # --- Session State Initialization ---
-# This ensures that all necessary keys are in st.session_state even before data is loaded.
-# It prevents errors on the other pages if they are visited before processing data.
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
@@ -121,7 +124,6 @@ with st.sidebar:
     st.divider()
 
     # --- INPUTS FOR PROJECTIONS & AI PAGES ---
-    # These are stored in session_state so pages can access them without re-declaring widgets
     with st.expander("Projection & AI Assumptions"):
         st.subheader("General Settings")
         st.session_state.proj_horizon = st.number_input("Projection Horizon (Months)", 1, 48, 12)
@@ -129,10 +131,10 @@ with st.sidebar:
         st.session_state.shared_icf_variation = st.slider("Projected ICF Variation (+/- %)", 0, 50, 10)
 
         st.subheader("Future Spend & CPQR ('Projections' Page)")
-        # Logic to create and manage the future spend/CPQR dataframes
-        last_hist_month = st.session_state.referral_data_processed["Submission_Month"].max() if st.session_state.data_processed_successfully else pd.Period(datetime.now(), 'M')
+        last_hist_month = st.session_state.referral_data_processed["Submission_Month"].max() if st.session_state.data_processed_successfully and st.session_state.referral_data_processed is not None else pd.Period(datetime.now(), 'M')
         future_months = pd.period_range(start=last_hist_month + 1, periods=st.session_state.proj_horizon, freq='M')
         
+        # Check if the dataframe needs to be recreated
         if 'proj_spend_df_cache' not in st.session_state or len(st.session_state.proj_spend_df_cache) != len(future_months):
             st.session_state.proj_spend_df_cache = pd.DataFrame({'Month': future_months.strftime('%Y-%m'), 'Planned_Spend': [20000.0] * len(future_months)})
             st.session_state.proj_cpqr_df_cache = pd.DataFrame({'Month': future_months.strftime('%Y-%m'), 'Assumed_CPQR': [120.0] * len(future_months)})
@@ -164,11 +166,7 @@ if uploaded_referral_file and uploaded_funnel_def_file:
     if st.button("Process Uploaded Data", type="primary"):
         with st.spinner("Parsing files and processing data... This may take a moment."):
             try:
-                # --- CORRECTED FILE HANDLING ---
-                # Read the file into memory ONCE.
                 referral_bytes_data = uploaded_referral_file.getvalue()
-
-                # PII Check using the byte data
                 header_df = pd.read_csv(io.BytesIO(referral_bytes_data), nrows=0, low_memory=False)
                 pii_cols = [c for c in ["notes", "first name", "last name", "name", "phone", "email"] if c in [str(h).lower().strip() for h in header_df.columns]]
 
@@ -177,16 +175,13 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                     st.error(f"PII Detected in columns: {', '.join(original_col_names)}. Please remove them and re-upload.", icon="🚫")
                     st.stop()
                 
-                # If PII check passes, proceed with processing
                 funnel_def, ordered_st, ts_map = parse_funnel_definition(uploaded_funnel_def_file)
                 
                 if funnel_def and ordered_st and ts_map:
-                    # Use the same byte data again for the main read. No need to touch the uploader object.
                     raw_df = pd.read_csv(io.BytesIO(referral_bytes_data))
                     processed_data = preprocess_referral_data(raw_df, funnel_def, ordered_st, ts_map)
 
                     if processed_data is not None and not processed_data.empty:
-                        # Store all results in session_state for other pages to use
                         st.session_state.funnel_definition = funnel_def
                         st.session_state.ordered_stages = ordered_st
                         st.session_state.ts_col_map = ts_map
@@ -195,7 +190,7 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                         st.session_state.site_metrics_calculated = calculate_site_metrics(processed_data, ordered_st, ts_map)
                         st.session_state.data_processed_successfully = True
                         st.success("Data processed successfully!")
-                        st.rerun() # Rerun to update the UI status
+                        st.rerun()
                     else:
                         st.error("Data processing failed after preprocessing. Please check the referral file contents and format.")
                 else:
