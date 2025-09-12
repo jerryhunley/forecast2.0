@@ -6,9 +6,9 @@ import io
 import os
 
 # --- Utility and Constant Imports ---
-from utils.parsing import parse_funnel_definition
-from utils.processing import preprocess_referral_data
-from utils.calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
+from parsing import parse_funnel_definition
+from processing import preprocess_referral_data
+from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
 from constants import *
 
 # --- Page Configuration ---
@@ -71,13 +71,11 @@ with st.sidebar:
             st.session_state.historical_spend_df,
             num_rows="dynamic",
             key="hist_spend_editor",
-            use_container_width=True,
             column_config={
                 "Month (YYYY-MM)": st.column_config.TextColumn(help="YYYY-MM format", required=True),
                 "Historical Spend": st.column_config.NumberColumn(format="$%.2f", required=True)
             }
         )
-        # Process and store historical ad spend in session state
         temp_spend_dict = {}
         valid_entries = True
         for _, row in edited_df.iterrows():
@@ -106,17 +104,14 @@ with st.sidebar:
             "Appt -> ICF %": st.slider("Appt Sched -> ICF %", 0, 100, 15),
             "Lag Qual -> ICF (Days)": st.slider("Lag Qual (POF) -> ICF (Days)", 0, 100, 0, help="Lower is better."),
             "Site Projection Lag (Days)": st.slider("Site Projection Lag (Days)", 0, 100, 0, help="Lower is better."),
-            # Generic metrics used by Ad Performance
             "Screen Fail % (from ICF)": st.slider("Generic Screen Fail %", 0, 100, 5, help="Lower is better."),
             "Projection Lag (Days)": st.slider("Generic Projection Lag (Days)", 0, 100, 0, help="Lower is better.")
         }
         total_weight = sum(abs(w) for w in weights.values())
         st.session_state.weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
 
-
     st.divider()
 
-    # --- INPUTS FOR PROJECTIONS & AI PAGES ---
     with st.expander("Projection & AI Assumptions"):
         st.subheader("General Settings")
         st.session_state.proj_horizon = st.number_input("Projection Horizon (Months)", 1, 48, 12)
@@ -127,13 +122,12 @@ with st.sidebar:
         last_hist_month = st.session_state.referral_data_processed["Submission_Month"].max() if st.session_state.data_processed_successfully and st.session_state.referral_data_processed is not None else pd.Period(datetime.now(), 'M')
         future_months = pd.period_range(start=last_hist_month + 1, periods=st.session_state.proj_horizon, freq='M')
         
-        # Check if the dataframe needs to be recreated
         if 'proj_spend_df_cache' not in st.session_state or len(st.session_state.proj_spend_df_cache) != len(future_months):
             st.session_state.proj_spend_df_cache = pd.DataFrame({'Month': future_months.strftime('%Y-%m'), 'Planned_Spend': [20000.0] * len(future_months)})
             st.session_state.proj_cpqr_df_cache = pd.DataFrame({'Month': future_months.strftime('%Y-%m'), 'Assumed_CPQR': [120.0] * len(future_months)})
 
-        edited_spend_df = st.data_editor(st.session_state.proj_spend_df_cache, key='proj_spend_editor', use_container_width=True)
-        edited_cpqr_df = st.data_editor(st.session_state.proj_cpqr_df_cache, key='proj_cpqr_editor', use_container_width=True)
+        edited_spend_df = st.data_editor(st.session_state.proj_spend_df_cache, key='proj_spend_editor')
+        edited_cpqr_df = st.data_editor(st.session_state.proj_cpqr_df_cache, key='proj_cpqr_editor')
         st.session_state.proj_spend_dict = {pd.Period(row['Month'], 'M'): row['Planned_Spend'] for _, row in edited_spend_df.iterrows()}
         st.session_state.proj_cpqr_dict = {pd.Period(row['Month'], 'M'): row['Assumed_CPQR'] for _, row in edited_cpqr_df.iterrows()}
 
