@@ -1,4 +1,3 @@
-```python
 # utils/calculations.py
 import streamlit as st
 import pandas as pd
@@ -175,4 +174,3 @@ def calculate_site_metrics(_processed_df, ordered_stages, ts_col_map):
         grouping_col="Site",
         unclassified_label="Unassigned Site"
     )
-```
