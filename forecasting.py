@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timedelta
 
 from constants import *
-from utils.calculations import calculate_avg_lag_generic
+from calculations import calculate_avg_lag_generic
 
 def determine_effective_projection_rates(_processed_df, ordered_stages, ts_col_map,
                                           rate_method_sidebar, rolling_window_sidebar, manual_rates_sidebar,

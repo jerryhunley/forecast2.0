@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-from utils.parsing import parse_datetime_with_timezone, parse_history_string
+from parsing import parse_datetime_with_timezone, parse_history_string
 
 def get_stage_timestamps(row, parsed_stage_history_col, parsed_status_history_col, funnel_def, ordered_stgs, ts_col_mapping):
     timestamps = {ts_col_mapping[stage]: pd.NaT for stage in ordered_stgs}
