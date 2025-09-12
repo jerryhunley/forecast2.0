@@ -2,7 +2,14 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import sys
+import os
 
+# --- Add the root directory to the Python path ---
+# This is necessary for Streamlit Cloud to find the 'utils' module.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Now the imports from your custom modules will work
 from utils.forecasting import determine_effective_projection_rates, calculate_pipeline_projection, generate_funnel_narrative
 from constants import *
 
@@ -62,23 +69,26 @@ st.divider()
 
 # --- Main Page Logic ---
 if st.button("🔬 Analyze Current Funnel", type="primary"):
+    # Determine the effective rates based on user selection
     effective_rates, rates_method_desc = determine_effective_projection_rates(
         processed_data, ordered_stages, ts_col_map,
-        rate_method, rolling_window, manual_rates, inter_stage_lags,
-        sidebar_display_area=None
+        rate_method, rolling_window, manual_rates, inter_stage_lags
     )
+    # Run the main pipeline calculation
     st.session_state.funnel_analysis_results = calculate_pipeline_projection(
         _processed_df=processed_data,
         ordered_stages=ordered_stages,
         ts_col_map=ts_col_map,
         inter_stage_lags=inter_stage_lags,
         conversion_rates=effective_rates,
-        lag_assumption_model=None
+        lag_assumption_model=None # Not used in this model
     )
+    # Generate the narrative text based on the results
     st.session_state.funnel_narrative_data = generate_funnel_narrative(
         st.session_state.funnel_analysis_results.get('in_flight_df_for_narrative', pd.DataFrame()),
         ordered_stages, effective_rates, inter_stage_lags
     )
+    # Store the description of the method used for display
     st.session_state.funnel_analysis_rates_desc = rates_method_desc
 
 # --- Display Results ---
@@ -114,13 +124,13 @@ if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_ana
     st.subheader("Projected Monthly Landings (Future)")
     results_df = results['results_df']
     if not results_df.empty:
-        st.dataframe(results_df.style.format("{:,.0f}"), use_container_width=True)
-        
+        st.dataframe(results_df[['Projected_ICF_Landed', 'Projected_Enrollments_Landed']].style.format("{:,.0f}"), use_container_width=True)
+
         st.subheader("Cumulative Future Projections Over Time")
         chart_df = results_df[['Cumulative_ICF_Landed', 'Cumulative_Enrollments_Landed']].copy()
         chart_df.index = chart_df.index.to_timestamp()
         st.line_chart(chart_df)
-        
+
         try:
             csv = results_df.reset_index().to_csv(index=False).encode('utf-8')
             st.download_button("Download Funnel Analysis Data", csv, 'funnel_analysis_projection.csv', 'text/csv', key='dl_funnel_analysis')

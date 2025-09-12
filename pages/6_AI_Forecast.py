@@ -3,7 +3,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
+import sys
+import os
 
+# --- Add the root directory to the Python path ---
+# This is necessary for Streamlit Cloud to find the 'utils' module.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Now the imports from your custom modules will work
 from utils.forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
 from utils.calculations import calculate_avg_lag_generic
 from constants import *
@@ -85,10 +92,10 @@ if rate_method == 'Rolling Historical Average':
 
 cr1, cr2 = st.columns(2)
 manual_rates = {
-    f"{STAGE_PASSED_ONLINE_FORM} -> {STAGE_PRE_SCREENING_ACTIVITIES}": cr1.slider("AI: POF -> PreScreen %", 0.0, 100.0, 90.0, format="%.1f%%") / 100.0,
-    f"{STAGE_PRE_SCREENING_ACTIVITIES} -> {STAGE_SENT_TO_SITE}": cr1.slider("AI: PreScreen -> StS %", 0.0, 100.0, 25.0, format="%.1f%%") / 100.0,
-    f"{STAGE_SENT_TO_SITE} -> {STAGE_APPOINTMENT_SCHEDULED}": cr2.slider("AI: StS -> Appt %", 0.0, 100.0, 50.0, format="%.1f%%") / 100.0,
-    f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}": cr2.slider("AI: Appt -> ICF %", 0.0, 100.0, 60.0, format="%.1f%%") / 100.0
+    f"{STAGE_PASSED_ONLINE_FORM} -> {STAGE_PRE_SCREENING_ACTIVITIES}": cr1.slider("AI: POF -> PreScreen %", 0.0, 100.0, 90.0, format="%.1f%%", key='ai_cr_qps') / 100.0,
+    f"{STAGE_PRE_SCREENING_ACTIVITIES} -> {STAGE_SENT_TO_SITE}": cr1.slider("AI: PreScreen -> StS %", 0.0, 100.0, 25.0, format="%.1f%%", key='ai_cr_pssts') / 100.0,
+    f"{STAGE_SENT_TO_SITE} -> {STAGE_APPOINTMENT_SCHEDULED}": cr2.slider("AI: StS -> Appt %", 0.0, 100.0, 50.0, format="%.1f%%", key='ai_cr_sa') / 100.0,
+    f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}": cr2.slider("AI: Appt -> ICF %", 0.0, 100.0, 60.0, format="%.1f%%", key='ai_cr_ai') / 100.0
 }
 
 st.divider()
@@ -114,6 +121,9 @@ with st.expander("Site Activation/Deactivation Dates"):
                 'activation_period': pd.Period(row['Activation Date'], 'M') if pd.notna(row['Activation Date']) else None,
                 'deactivation_period': pd.Period(row['Deactivation Date'], 'M') if pd.notna(row['Deactivation Date']) else None,
             }
+    else:
+        st.info("No site data available to configure.")
+
 
 # Site QL Caps
 with st.expander("Site-Specific Monthly QL Caps"):
@@ -132,6 +142,8 @@ with st.expander("Site-Specific Monthly QL Caps"):
         for _, row in edited_caps_df.iterrows():
             if pd.notna(row['Monthly POF Cap']):
                 site_caps[row['Site']] = int(row['Monthly POF Cap'])
+    else:
+        st.info("No site data available to configure.")
 
 
 st.divider()
@@ -156,48 +168,48 @@ if st.button("🚀 Generate Auto Forecast", type="primary"):
         if not pof_data.empty:
             monthly_counts = pof_data.groupby('Submission_Month').size()
             if not monthly_counts.empty:
+                # Use mean of up to the last 6 months as a baseline
                 baseline_ql_volume = monthly_counts.nlargest(6).mean()
-    
-    # Run primary forecast
+
+    # 4. Run primary forecast
+    run_mode_primary = "primary"
     st.session_state.ai_forecast_primary_results = calculate_ai_forecast_core(
-        goal_lpi_date_dt_orig=goal_lpi_date, goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
+        goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
         icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
         ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
         site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input=site_caps,
         site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
         cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-        run_mode="primary", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+        run_mode=run_mode_primary, ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
         ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
         baseline_monthly_ql_volume_override=baseline_ql_volume
     )
-
-    # If primary is unfeasible, run best-case scenario
+    
+    # 5. If primary is unfeasible, run best-case scenario
     _, _, _, _, is_unfeasible, _ = st.session_state.ai_forecast_primary_results
+    st.session_state.show_best_case = is_unfeasible # Set flag to decide which results to show
     if is_unfeasible:
         st.info("Initial forecast is unfeasible. Running a 'best-case' scenario with an extended LPI date...")
+        run_mode_best_case = "best_case_extended_lpi"
         st.session_state.ai_forecast_best_case_results = calculate_ai_forecast_core(
-            goal_lpi_date_dt_orig=goal_lpi_date, goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
+            goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
             icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
             ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
             site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input=site_caps,
             site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
             cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-            run_mode="best_case_extended_lpi", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+            run_mode=run_mode_best_case, ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
             ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
             baseline_monthly_ql_volume_override=baseline_ql_volume
         )
 
 
 # --- Display Results ---
-primary_results = st.session_state.get('ai_forecast_primary_results')
-best_case_results = st.session_state.get('ai_forecast_best_case_results')
-
-# Decide which results to show
 results_to_show = None
-if best_case_results:
-    results_to_show = best_case_results
-elif primary_results:
-    results_to_show = primary_results
+if st.session_state.get('show_best_case', False):
+    results_to_show = st.session_state.get('ai_forecast_best_case_results')
+else:
+    results_to_show = st.session_state.get('ai_forecast_primary_results')
 
 if results_to_show:
     df, site_df, ads_off, message, is_unfeasible, actual_icfs = results_to_show

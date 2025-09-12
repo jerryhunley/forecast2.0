@@ -1,9 +1,16 @@
 # pages/2_Site_Performance.py
 import streamlit as st
 import pandas as pd
+import sys
+import os
 
+# --- Add the root directory to the Python path ---
+# This is necessary for Streamlit Cloud to find the 'utils' module.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Now the imports from your custom modules will work
 from utils.scoring import score_sites
-from utils.helpers import format_performance_df # Use our new helper
+from utils.helpers import format_performance_df
 
 st.set_page_config(
     page_title="Site Performance",
@@ -40,27 +47,31 @@ if site_metrics is not None and not site_metrics.empty and weights:
 
     # Filter out any columns that might not have been generated
     display_cols_exist = [col for col in display_cols if col in ranked_sites_df.columns]
-    final_display_df = ranked_sites_df[display_cols_exist]
+    
+    if display_cols_exist:
+        final_display_df = ranked_sites_df[display_cols_exist]
 
-    if not final_display_df.empty:
-        # Use the helper function to format the dataframe for display
-        formatted_df = format_performance_df(final_display_df)
-        st.dataframe(formatted_df, use_container_width=True, hide_index=True)
+        if not final_display_df.empty:
+            # Use the helper function to format the dataframe for display
+            formatted_df = format_performance_df(final_display_df)
+            st.dataframe(formatted_df, use_container_width=True, hide_index=True)
 
-        # --- Download Button ---
-        try:
-            csv_data = final_display_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="Download Site Ranking Data",
-                data=csv_data,
-                file_name='site_performance_ranking.csv',
-                mime='text/csv',
-                key='download_site_perf'
-            )
-        except Exception as e:
-            st.warning(f"Could not prepare data for download: {e}")
+            # --- Download Button ---
+            try:
+                csv_data = final_display_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="Download Site Ranking Data",
+                    data=csv_data,
+                    file_name='site_performance_ranking.csv',
+                    mime='text/csv',
+                    key='download_site_perf'
+                )
+            except Exception as e:
+                st.warning(f"Could not prepare data for download: {e}")
+        else:
+            st.warning("Could not generate the site ranking table after filtering columns.")
     else:
-        st.warning("Could not generate the site ranking table after filtering columns.")
+        st.warning("None of the standard display columns were found in the calculated data.")
 
 elif site_metrics is None or site_metrics.empty:
     st.warning("Site metrics have not been calculated. This usually means the 'Site' column was not found in your uploaded referral data.")

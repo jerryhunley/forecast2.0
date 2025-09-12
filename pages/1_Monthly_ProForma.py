@@ -1,7 +1,16 @@
 # pages/1_Monthly_ProForma.py
 import streamlit as st
 import pandas as pd
+import sys
+import os
 
+# --- Add the root directory to the Python path ---
+# This is necessary for Streamlit Cloud to find the 'utils' module.
+# It gets the directory of the current script, goes up one level to the root,
+# and adds that to the list of places Python looks for modules.
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Now the imports from your custom modules will work
 from utils.calculations import calculate_proforma_metrics
 
 st.set_page_config(
@@ -14,13 +23,12 @@ st.title("📅 Monthly ProForma")
 st.header("Historical Cohort Performance")
 
 # --- Page Guard ---
-# Check if data is loaded. If not, show a warning and stop the page from rendering.
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
 
+# ... (the rest of the file is the same) ...
 # --- Load Data from Session State ---
-# Access the pre-processed data and configurations stored in the session state.
 processed_data = st.session_state.referral_data_processed
 ordered_stages = st.session_state.ordered_stages
 ts_col_map = st.session_state.ts_col_map
@@ -36,7 +44,6 @@ if processed_data is not None and not processed_data.empty and ad_spend_dict:
     )
 
     if not proforma_df.empty:
-        # Transpose for better viewing and format the display
         proforma_display = proforma_df.transpose()
         proforma_display.columns = [str(col) for col in proforma_display.columns]
 
@@ -48,7 +55,6 @@ if processed_data is not None and not processed_data.empty and ad_spend_dict:
 
         st.dataframe(proforma_display.style.format(format_dict, na_rep='-'), use_container_width=True)
 
-        # --- Download Button ---
         try:
             csv_data = proforma_df.reset_index().to_csv(index=False).encode('utf-8')
             st.download_button(
@@ -60,7 +66,6 @@ if processed_data is not None and not processed_data.empty and ad_spend_dict:
             )
         except Exception as e:
             st.warning(f"Could not prepare data for download: {e}")
-
     else:
         st.warning("Could not generate the ProForma table. This may be due to a mismatch between the months in your data and the historical ad spend entered.")
 else:
