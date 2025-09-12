@@ -3,16 +3,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import sys
-import os
 
-# --- Add the root directory to the Python path ---
-# This is necessary for Streamlit Cloud to find the 'utils' module.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Now the imports from your custom modules will work
-from utils.forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
-from utils.calculations import calculate_avg_lag_generic
+# Direct imports from modules in the root directory
+from forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
+from calculations import calculate_avg_lag_generic
 from constants import *
 
 st.set_page_config(
@@ -27,12 +21,12 @@ Define your recruitment goals. The tool will estimate a monthly plan to meet you
 Settings for CPQL Inflation and Monthly QL Capacity can be adjusted in the sidebar on the Home page.
 """)
 
-# --- Page Guard ---
+# Page Guard
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
 
-# --- Load Data from Session State ---
+# Load Data from Session State
 processed_data = st.session_state.referral_data_processed
 ordered_stages = st.session_state.ordered_stages
 ts_col_map = st.session_state.ts_col_map
@@ -48,7 +42,7 @@ ql_capacity_multiplier = st.session_state.ai_ql_capacity_multiplier
 proj_horizon = st.session_state.proj_horizon
 
 
-# --- Page-Specific Goal & Assumption Controls ---
+# Page-Specific Goal & Assumption Controls
 st.subheader("Define Your Goals")
 g1, g2, g3 = st.columns(3)
 with g1:
@@ -114,7 +108,7 @@ with st.expander("Site Activation/Deactivation Dates"):
                 "Activation Date": st.column_config.DateColumn(),
                 "Deactivation Date": st.column_config.DateColumn(),
             },
-            hide_index=True, use_container_width=True, key="site_activity_editor"
+            hide_index=True, key="site_activity_editor"
         )
         for _, row in edited_activity_df.iterrows():
             site_activity_schedule[row['Site']] = {
@@ -137,7 +131,7 @@ with st.expander("Site-Specific Monthly QL Caps"):
                 "Site": st.column_config.TextColumn(disabled=True),
                 "Monthly POF Cap": st.column_config.NumberColumn(min_value=0, step=1)
             },
-            hide_index=True, use_container_width=True, key="site_caps_editor"
+            hide_index=True, key="site_caps_editor"
         )
         for _, row in edited_caps_df.iterrows():
             if pd.notna(row['Monthly POF Cap']):
@@ -148,7 +142,6 @@ with st.expander("Site-Specific Monthly QL Caps"):
 
 st.divider()
 
-# --- Main Page Logic ---
 if st.button("🚀 Generate Auto Forecast", type="primary"):
     # 1. Determine effective rates
     effective_rates, rates_method_desc = determine_effective_projection_rates(
@@ -165,12 +158,11 @@ if st.button("🚀 Generate Auto Forecast", type="primary"):
     baseline_ql_volume = 50.0 # Default fallback
     if ts_pof_col and ts_pof_col in processed_data.columns:
         pof_data = processed_data.dropna(subset=[ts_pof_col])
-        if not pof_data.empty:
+        if not pof_data.empty and 'Submission_Month' in pof_data.columns:
             monthly_counts = pof_data.groupby('Submission_Month').size()
             if not monthly_counts.empty:
-                # Use mean of up to the last 6 months as a baseline
                 baseline_ql_volume = monthly_counts.nlargest(6).mean()
-
+    
     # 4. Run primary forecast
     run_mode_primary = "primary"
     st.session_state.ai_forecast_primary_results = calculate_ai_forecast_core(
@@ -187,7 +179,7 @@ if st.button("🚀 Generate Auto Forecast", type="primary"):
     
     # 5. If primary is unfeasible, run best-case scenario
     _, _, _, _, is_unfeasible, _ = st.session_state.ai_forecast_primary_results
-    st.session_state.show_best_case = is_unfeasible # Set flag to decide which results to show
+    st.session_state.show_best_case = is_unfeasible
     if is_unfeasible:
         st.info("Initial forecast is unfeasible. Running a 'best-case' scenario with an extended LPI date...")
         run_mode_best_case = "best_case_extended_lpi"
@@ -229,9 +221,8 @@ if results_to_show:
         st.subheader("Forecasted Monthly Performance")
         df_display = df.copy()
         df_display.rename(columns={'Target_QLs_POF': 'Planned QLs (POF)'}, inplace=True)
-        # Add formatting for display...
-        st.dataframe(df_display, use_container_width=True)
+        st.dataframe(df_display)
 
     if site_df is not None and not site_df.empty:
         st.subheader("Forecasted Site-Level Performance")
-        st.dataframe(site_df, use_container_width=True)
+        st.dataframe(site_df)

@@ -2,15 +2,9 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import sys
-import os
 
-# --- Add the root directory to the Python path ---
-# This is necessary for Streamlit Cloud to find the 'utils' module.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Now the imports from your custom modules will work
-from utils.forecasting import determine_effective_projection_rates, calculate_pipeline_projection, generate_funnel_narrative
+# Direct imports from modules in the root directory
+from forecasting import determine_effective_projection_rates, calculate_pipeline_projection, generate_funnel_narrative
 from constants import *
 
 st.set_page_config(
@@ -25,18 +19,18 @@ This forecast shows the expected outcomes (**ICFs & Enrollments**) from the lead
 It answers the question: "If we stopped all new recruitment activities today, what results would we still see and when?"
 """)
 
-# --- Page Guard ---
+# Page Guard
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
 
-# --- Load Data from Session State ---
+# Load Data from Session State
 processed_data = st.session_state.referral_data_processed
 ordered_stages = st.session_state.ordered_stages
 ts_col_map = st.session_state.ts_col_map
 inter_stage_lags = st.session_state.inter_stage_lags
 
-# --- Page-Specific Assumption Controls ---
+# Page-Specific Assumption Controls
 st.divider()
 st.subheader("Funnel Analysis Assumptions")
 rate_method = st.radio(
@@ -67,31 +61,25 @@ manual_rates = {
 
 st.divider()
 
-# --- Main Page Logic ---
 if st.button("🔬 Analyze Current Funnel", type="primary"):
-    # Determine the effective rates based on user selection
     effective_rates, rates_method_desc = determine_effective_projection_rates(
         processed_data, ordered_stages, ts_col_map,
         rate_method, rolling_window, manual_rates, inter_stage_lags
     )
-    # Run the main pipeline calculation
     st.session_state.funnel_analysis_results = calculate_pipeline_projection(
         _processed_df=processed_data,
         ordered_stages=ordered_stages,
         ts_col_map=ts_col_map,
         inter_stage_lags=inter_stage_lags,
         conversion_rates=effective_rates,
-        lag_assumption_model=None # Not used in this model
+        lag_assumption_model=None
     )
-    # Generate the narrative text based on the results
     st.session_state.funnel_narrative_data = generate_funnel_narrative(
         st.session_state.funnel_analysis_results.get('in_flight_df_for_narrative', pd.DataFrame()),
         ordered_stages, effective_rates, inter_stage_lags
     )
-    # Store the description of the method used for display
     st.session_state.funnel_analysis_rates_desc = rates_method_desc
 
-# --- Display Results ---
 if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_analysis_results:
     results = st.session_state.funnel_analysis_results
     rates_desc = st.session_state.get('funnel_analysis_rates_desc', "N/A")
@@ -102,7 +90,6 @@ if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_ana
     col1.metric("Total Expected ICF Yield from Funnel", f"{results['total_icf_yield']:,.1f}")
     col2.metric("Total Expected Enrollment Yield from Funnel", f"{results['total_enroll_yield']:,.1f}")
 
-    # --- Narrative Section ---
     narrative_steps = st.session_state.get('funnel_narrative_data', [])
     if narrative_steps:
         with st.expander("Show Funnel Breakdown", expanded=True):
@@ -120,11 +107,10 @@ if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_ana
                     st.info(f"**~{proj['projected_count']:.1f}** will advance to **'{proj['stage_name']}'**{time_text}", icon="➡️")
                 st.divider()
 
-    # --- Results Table and Chart ---
     st.subheader("Projected Monthly Landings (Future)")
     results_df = results['results_df']
     if not results_df.empty:
-        st.dataframe(results_df[['Projected_ICF_Landed', 'Projected_Enrollments_Landed']].style.format("{:,.0f}"), use_container_width=True)
+        st.dataframe(results_df[['Projected_ICF_Landed', 'Projected_Enrollments_Landed']].style.format("{:,.0f}"))
 
         st.subheader("Cumulative Future Projections Over Time")
         chart_df = results_df[['Cumulative_ICF_Landed', 'Cumulative_Enrollments_Landed']].copy()

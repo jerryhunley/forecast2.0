@@ -1,17 +1,11 @@
 # pages/3_Ad_Performance.py
 import streamlit as st
 import pandas as pd
-import sys
-import os
 
-# --- Add the root directory to the Python path ---
-# This is necessary for Streamlit Cloud to find the 'utils' module.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-# Now the imports from your custom modules will work
-from utils.calculations import calculate_grouped_performance_metrics
-from utils.scoring import score_performance_groups
-from utils.helpers import format_performance_df
+# Direct imports from modules in the root directory
+from calculations import calculate_grouped_performance_metrics
+from scoring import score_performance_groups
+from helpers import format_performance_df
 
 st.set_page_config(
     page_title="Ad Performance",
@@ -22,23 +16,21 @@ st.set_page_config(
 st.title("📢 Ad Channel Performance")
 st.info("Performance metrics grouped by UTM parameters, scored using the same weights as Site Performance (generic versions of metrics like Screen Fail % are used).")
 
-# --- Page Guard ---
+# Page Guard
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
 
-# --- Load Data from Session State ---
+# Load Data from Session State
 processed_data = st.session_state.referral_data_processed
 ordered_stages = st.session_state.ordered_stages
 ts_col_map = st.session_state.ts_col_map
 weights = st.session_state.weights_normalized
 
-# --- Check for UTM Columns ---
+# Check for UTM Columns
 if "UTM Source" not in processed_data.columns:
     st.warning("The 'UTM Source' column was not found in the uploaded data. Ad Performance cannot be calculated.")
     st.stop()
-
-# --- Main Page Logic ---
 
 # === Performance by UTM Source ===
 st.subheader("Performance by UTM Source")
@@ -69,7 +61,7 @@ if not utm_source_metrics_df.empty:
 
         if not final_ad_display.empty:
             formatted_df = format_performance_df(final_ad_display)
-            st.dataframe(formatted_df, use_container_width=True, hide_index=True)
+            st.dataframe(formatted_df, hide_index=True)
             try:
                 csv_data = final_ad_display.to_csv(index=False).encode('utf-8')
                 st.download_button("Download UTM Source Performance", csv_data, "utm_source_performance.csv", "text/csv", key='dl_ad_source')
@@ -123,7 +115,7 @@ if "UTM Medium" in processed_data.columns:
 
             if not final_combo_display.empty:
                 formatted_df = format_performance_df(final_combo_display)
-                st.dataframe(formatted_df, use_container_width=True, hide_index=True)
+                st.dataframe(formatted_df, hide_index=True)
                 try:
                     csv_data = final_combo_display.to_csv(index=False).encode('utf-8')
                     st.download_button("Download UTM Source/Medium Performance", csv_data, "utm_source_medium_performance.csv", "text/csv", key='dl_ad_combo')
