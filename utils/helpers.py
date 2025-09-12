@@ -1,4 +1,3 @@
-```python
 # utils/helpers.py
 import pandas as pd
 
@@ -24,4 +23,3 @@ def format_performance_df(df: pd.DataFrame) -> pd.DataFrame:
             formatted_df[col] = formatted_df[col].map('{:,.0f}'.format).replace('nan', '-')
 
     return formatted_df
-```
