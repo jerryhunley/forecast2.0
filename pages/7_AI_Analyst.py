@@ -172,3 +172,25 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
         analysis_context = f"""--- PYTHON CODE USED ---
 ```python
 {code_response}
+
+--- RAW DATA RESULT ---
+{result_output_str if result_output_str else "A plot was successfully generated."}
+"""
+full_summarizer_prompt = f"{summarizer_prompt}\n\n--- USER'S QUESTION ---\n{user_prompt}\n\n--- ANALYSIS & RESULT ---\n{analysis_context}\n\n--- YOUR INSIGHTFUL SUMMARY ---"
+
+    try:
+        summary_response = model.generate_content(full_summarizer_prompt)
+        summary_text = summary_response.text
+    except Exception as e:
+        summary_text = f"Could not generate summary: {e}"
+
+# Display Final Summary
+with st.chat_message("assistant"):
+    st.markdown("**Summary & Insights:**")
+    st.markdown(summary_text)
+
+# Add the full exchange to history for display
+st.session_state.messages.append({
+    "role": "assistant", 
+    "content": f"**Analysis Result:**\n```\n{result_output_str if result_output_str else 'A plot was generated.'}\n```\n**Summary & Insights:**\n{summary_text}"
+})
