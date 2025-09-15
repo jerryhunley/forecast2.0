@@ -4,24 +4,28 @@ import pandas as pd
 import google.generativeai as genai
 from io import StringIO
 import traceback
-import matplotlib.pyplot as plt # Import for st.pyplot
-import altair as alt # Import for st.altair_chart
+import matplotlib.pyplot as plt
+import altair as alt
 
-# Direct import from the root directory
+# --- Direct imports from modules in the root directory ---
+# We now import all the functions we want to offer as "tools"
 from constants import *
+from calculations import calculate_grouped_performance_metrics, calculate_avg_lag_generic
+from scoring import score_performance_groups
+from helpers import format_performance_df
 
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
-st.title("🤖 AI Code-Executing Analyst")
+st.title("🤖 Tool-Using AI Analyst")
 st.info("""
-Ask questions about your data. The AI will write and execute Python code to answer you.
-**You can now ask for visualizations!**
+This AI Analyst can now use the app's own calculation functions as tools to answer questions. 
+This ensures consistency with the other pages. It can still write custom code for unique requests.
 
 **Example questions:**
-- "How many total qualified referrals are there?"
-- "Create a bar chart of the top 5 sites by enrollment count."
-- "Show a line chart of qualified leads over time by month."
+- "Can you show me the full site performance report?" (Uses `calculate_grouped_performance_metrics`)
+- "What's the average time from Signed ICF to Enrolled?" (Uses `calculate_avg_lag_generic`)
+- "Create a bar chart of the top 5 sites by enrollment count." (Writes custom code)
 """)
 
 # --- Page Guard ---
@@ -29,9 +33,11 @@ if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
 
-# --- Load Data from Session State ---
+# --- Load Data and Config from Session State ---
 df = st.session_state.referral_data_processed
 ts_col_map = st.session_state.ts_col_map
+ordered_stages = st.session_state.ordered_stages
+weights = st.session_state.weights_normalized
 
 # --- Configure the Gemini API ---
 try:
@@ -43,44 +49,57 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# --- NEW: System Prompt with Visualization Instructions ---
+# --- NEW: System Prompt with a "Tools Manifesto" ---
 @st.cache_data
-def get_system_prompt(df_info, ts_col_map):
-    prompt = "You are a world-class Python data analyst. You are an expert in the pandas, matplotlib, and altair libraries.\n"
-    prompt += "You will be given a question from a user about the data in a pandas DataFrame named `df`.\n"
-    prompt += "Your ONLY task is to respond with a single, executable Python code block to answer the user's question. Do not provide any explanation, preamble, or markdown formatting.\n\n"
-    
-    prompt += "--- IMPORTANT BUSINESS DEFINITIONS ---\n"
-    prompt += f"1. A 'Qualified Lead' is any lead with a valid timestamp in the `{ts_col_map.get(STAGE_PASSED_ONLINE_FORM)}` column.\n"
-    prompt += f"2. An 'Enrollment' is any lead with a valid timestamp in the `{ts_col_map.get(STAGE_ENROLLED)}` column.\n"
-    prompt += f"3. An 'ICF' is any lead with a valid timestamp in the `{ts_col_map.get(STAGE_SIGNED_ICF)}` column.\n"
-    prompt += "4. Conversion Rate (Stage A to B) = (count of B) / (count of A).\n"
-    prompt += "-------------------------------------\n\n"
+def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
+    prompt = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
 
-    # --- NEW: Visualization Instructions ---
-    prompt += "--- VISUALIZATION INSTRUCTIONS ---\n"
-    prompt += "1.  When a user asks for a chart, graph, or plot, you MUST generate the code to create it.\n"
-    prompt += "2.  You have two options for plotting: Matplotlib or Altair.\n"
-    prompt += "3.  **To display a Matplotlib plot:** Generate the plot as usual, but instead of `plt.show()`, you MUST end your code with `st.pyplot(plt.gcf())`.\n"
-    prompt += "4.  **To display an Altair chart:** Create the chart object (e.g., `chart = alt.Chart(...)`) and end your code with `st.altair_chart(chart, use_container_width=True)`.\n"
-    prompt += "5.  For any other output (like a number, a list, or a DataFrame), use the `print()` function.\n"
-    prompt += "-------------------------------------\n\n"
-    
-    prompt += "--- DATAFRAME `df` SCHEMA ---\n"
-    prompt += df_info
+--- AVAILABLE TOOLS ---
+
+You have access to a pandas DataFrame named `df` and a set of pre-built, trusted Python functions. You should ALWAYS prefer to use a pre-built function if it is suitable for the user's request, as this provides a consistent source of truth.
+
+1.  **`calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col, unclassified_label)`**
+    *   **Description:** The primary tool for performance analysis. Calculates all standard performance metrics (conversion rates, lag times, counts, etc.) for a given grouping.
+    *   **Use When:** The user asks for a "performance report", "breakdown", "summary", or comparison of a group like 'Site' or 'UTM Source'.
+    *   **Returns:** A pandas DataFrame. You MUST print the result.
+    *   **Example Call:** `print(calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col='Site', unclassified_label='Unassigned Site'))`
+
+2.  **`calculate_avg_lag_generic(df, col_from, col_to)`**
+    *   **Description:** Calculates the average lag time in days between two specific timestamp columns.
+    *   **Use When:** The user asks for the "average time", "lag", "duration", or "how long it takes" between two specific stages.
+    *   **Returns:** A number. You MUST print the result.
+    *   **Example Call:** `print(calculate_avg_lag_generic(df, ts_col_map.get('Signed ICF'), ts_col_map.get('Enrolled')))`
+
+3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**
+    *   **Description:** For any custom analysis or visualization where a pre-built tool is not available.
+    *   **Use When:** The user asks for a specific plot (bar, line, pie chart) or a custom data slice that the tools above don't provide.
+    *   **IMPORTANT PLOTTING RULES:**
+        *   To display a Matplotlib plot, end your code with `st.pyplot(plt.gcf())`.
+        *   To display an Altair chart, create the chart object (e.g., `chart = alt.Chart(...)`) and end your code with `st.altair_chart(chart, use_container_width=True)`.
+
+--- CONTEXT VARIABLES ---
+
+The following variables are pre-loaded and available for your code to use:
+- `df`: The main pandas DataFrame.
+- `ordered_stages`: A list of the funnel stage names in order.
+- `ts_col_map`: A dictionary mapping stage names to their timestamp column names in the DataFrame.
+- `weights`: A dictionary of weights for performance scoring.
+
+--- DATAFRAME `df` SCHEMA ---
+"""
+    prompt += _df_info
     prompt += "-----------------------------\n\n"
-    
-    prompt += "Your response MUST be a Python code block that starts with ```python and ends with ```."
+    prompt += "Your response MUST be a Python code block that starts with ```python and ends with ```. Do not provide any explanation or preamble."
     return prompt
 
-# Cache the DataFrame info to avoid re-computing it
 @st.cache_data
 def get_df_info(df):
     buffer = StringIO()
     df.info(buf=buffer)
     return buffer.getvalue()
 
-system_prompt = get_system_prompt(get_df_info(df), ts_col_map)
+# Generate the prompt once and cache it
+system_prompt = get_tool_prompt(get_df_info(df), str(ts_col_map), str(ordered_stages))
 
 # --- Main Chat Logic ---
 if "messages" not in st.session_state:
@@ -88,15 +107,7 @@ if "messages" not in st.session_state:
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        if message.get("is_code", False):
-            st.code(message["content"], language="python")
-        elif message.get("is_plot", False):
-            # The result of a plot is the plot object itself
-            st.pyplot(message["content"])
-        elif message.get("is_altair", False):
-            st.altair_chart(message["content"], use_container_width=True)
-        else:
-            st.markdown(message["content"])
+        st.markdown(message["content"])
 
 if user_prompt := st.chat_input("Ask a question about your data..."):
     st.session_state.messages.append({"role": "user", "content": user_prompt})
@@ -105,14 +116,15 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
 
     full_prompt = system_prompt + f"\n\nUser Question: {user_prompt}"
 
-    with st.spinner("AI Analyst is generating code..."):
+    with st.spinner("AI Analyst is selecting a tool and generating code..."):
         try:
             response = model.generate_content(full_prompt)
             code_response = response.text.strip().replace("```python", "").replace("```", "").strip()
             
-            st.session_state.messages.append({"role": "assistant", "content": code_response, "is_code": True})
             with st.chat_message("assistant"):
+                st.write("Generated Code:")
                 st.code(code_response, language="python")
+                st.session_state.messages.append({"role": "assistant", "content": f"**Generated Code:**\n```python\n{code_response}\n```"})
                 
         except Exception as e:
             st.error(f"An error occurred while generating code: {e}")
@@ -120,37 +132,51 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
     
     with st.spinner("Executing code..."):
         try:
-            output_buffer = StringIO()
-            import sys
-            original_stdout = sys.stdout
-            sys.stdout = output_buffer
-            
-            # The environment where the code will be executed
-            # It needs access to all libraries and the DataFrame
-            local_vars = {
-                "df": df, 
-                "pd": pd, 
+            # --- NEW: Expanded Execution Environment ---
+            # Provide the AI's code with all the necessary tools and variables
+            execution_globals = {
+                "__builtins__": __builtins__,
                 "st": st,
+                "pd": pd,
                 "plt": plt,
-                "alt": alt
+                "alt": alt,
+                "df": df,
+                "ordered_stages": ordered_stages,
+                "ts_col_map": ts_col_map,
+                "weights": weights,
+                "calculate_grouped_performance_metrics": calculate_grouped_performance_metrics,
+                "calculate_avg_lag_generic": calculate_avg_lag_generic,
+                "score_performance_groups": score_performance_groups,
+                "format_performance_df": format_performance_df
             }
             
-            exec(code_response, {"__builtins__": __builtins__}, local_vars)
-            
-            sys.stdout = original_stdout
-            result = output_buffer.getvalue()
-
-            if result: # If there was any print output
-                st.session_state.messages.append({"role": "assistant", "content": f"**Result:**\n\n{result}", "is_code": False})
-                with st.chat_message("assistant"):
-                    st.markdown(f"**Result:**\n\n{result}")
-
-        except Exception as e:
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": f"**An error occurred while executing the code:**\n\n{traceback.format_exc()}",
-                "is_code": False
-            })
+            # Use st.expander to show the output in a clean way
             with st.chat_message("assistant"):
-                st.error(f"An error occurred while executing the code:")
-                st.code(traceback.format_exc(), language="bash")
+                with st.expander("Execution Result", expanded=True):
+                    # Redirect print statements to a string buffer
+                    output_buffer = StringIO()
+                    import sys
+                    original_stdout = sys.stdout
+                    sys.stdout = output_buffer
+                    
+                    # Execute the code
+                    exec(code_response, execution_globals)
+                    
+                    # Restore stdout
+                    sys.stdout = original_stdout
+                    result_output = output_buffer.getvalue()
+                    
+                    if result_output:
+                        st.text(result_output)
+                        st.session_state.messages.append({"role": "assistant", "content": f"**Result:**\n```\n{result_output}\n```"})
+                    else:
+                        st.success("Code executed successfully and generated a plot.")
+                        st.session_state.messages.append({"role": "assistant", "content": "Code executed successfully and generated a plot."})
+
+
+        except Exception:
+            error_traceback = traceback.format_exc()
+            with st.chat_message("assistant"):
+                st.error("An error occurred while executing the code:")
+                st.code(error_traceback, language="bash")
+            st.session_state.messages.append({"role": "assistant", "content": f"**Execution Error:**\n```\n{error_traceback}\n```"})
