@@ -54,10 +54,21 @@ def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
     prompt = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
 
 --- AVAILABLE TOOLS ---
-# ... (this section is unchanged) ...
-1.  **`calculate_grouped_performance_metrics(...)`**: ...
-2.  **`calculate_avg_lag_generic(...)`**: ...
-3.  **`pandas` and Visualization Libraries (...)**: ...
+
+You have access to a pandas DataFrame named `df` and a set of pre-built, trusted Python functions. You should ALWAYS prefer to use a pre-built function if it is suitable. You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
+
+1.  **`calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col, unclassified_label)`**
+    *   **Description:** The primary tool for performance analysis. Calculates metrics (rates, lags, counts) for a group.
+    *   **Returns:** A pandas DataFrame.
+    *   **Example Call:** `print(calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col='Site', unclassified_label='Unassigned Site'))`
+
+2.  **`calculate_avg_lag_generic(df, col_from, col_to)`**
+    *   **Description:** Calculates the average lag time in days between two specific timestamp columns.
+    *   **Returns:** A number (float).
+    *   **Example Call:** `print(calculate_avg_lag_generic(df, ts_col_map.get('Signed ICF'), ts_col_map.get('Enrolled')))`
+
+3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**
+    *   **Description:** For any custom analysis or visualizations where a pre-built tool is not available.
 
 --- IMPORTANT BUSINESS DEFINITIONS & CODING RULES ---
 
@@ -68,10 +79,11 @@ def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
     *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`.
     *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.
     *   **Other (number, string, list):** Use `print()`.
-4.  **DEFENSIVE CODING:** Your generated code MUST be robust. Before performing any division, you MUST check if the denominator is zero. If a calculation results in `NaN` or `inf`, you must handle it gracefully and print a user-friendly message instead of letting the code error out.
+4.  **DEFENSIVE CODING:** Your code MUST be robust. Before division, check if the denominator is zero. Handle potential `NaN` or `inf` values gracefully and print a user-friendly message.
 
 --- CONTEXT VARIABLES ---
-# ... (this section is unchanged) ...
+
+The following variables are pre-loaded and available for your code to use:
 - `df`: The main pandas DataFrame.
 - `ordered_stages`: A list of the funnel stage names in order.
 - `ts_col_map`: A dictionary mapping stage names to their timestamp column names. Here is the exact dictionary: """
