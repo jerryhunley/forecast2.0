@@ -55,34 +55,31 @@ def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
 
 --- AVAILABLE TOOLS ---
 
-You have access to a pandas DataFrame named `df` and a set of pre-built, trusted Python functions. You should ALWAYS prefer to use a pre-built function if it is suitable for the user's request.
+You have access to a pandas DataFrame named `df` and a set of pre-built, trusted Python functions. You should ALWAYS prefer to use a pre-built function if it is suitable.
 
 1.  **`calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col, unclassified_label)`**
-    *   **Description:** The primary tool for performance analysis. Calculates all standard performance metrics (conversion rates, lag times, counts, etc.) for a given grouping.
-    *   **Use When:** The user asks for a "performance report", "breakdown", "summary", or comparison of a group like 'Site' or 'UTM Source'.
-    *   **Returns:** A pandas DataFrame. You MUST print the result.
-    *   **Example Call:** `print(calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col='Site', unclassified_label='Unassigned Site'))`
+    *   **Description:** The primary tool for performance analysis. Calculates metrics (rates, lags, counts) for a group.
+    *   **Use When:** The user asks for a "performance report", "breakdown", "summary", or comparison of 'Site' or 'UTM Source'.
+    *   **Returns:** A pandas DataFrame.
 
 2.  **`calculate_avg_lag_generic(df, col_from, col_to)`**
-    *   **Description:** Calculates the average lag time in days between two specific timestamp columns.
-    *   **Use When:** The user asks for the "average time", "lag", "duration", or "how long it takes" between two specific stages.
-    *   **Returns:** A number. You MUST print the result.
-    *   **Example Call:** `print(calculate_avg_lag_generic(df, ts_col_map.get('Signed ICF'), ts_col_map.get('Enrolled')))`
+    *   **Description:** Calculates the average lag time in days between two timestamp columns.
+    *   **Use When:** The user asks for "average time", "lag", or "duration".
+    *   **Returns:** A number.
 
 3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**
-    *   **Description:** For any custom analysis or visualization where a pre-built tool is not available.
-    *   **Use When:** The user asks for a specific plot (bar, line, pie chart) or a custom data slice that the tools above don't provide.
+    *   **Description:** For custom analysis or visualizations.
+    *   **Use When:** The user asks for a specific plot (bar, line, pie) or a custom data slice.
 
 --- IMPORTANT BUSINESS DEFINITIONS & CODING RULES ---
 
-1.  **How to Count Stages:** To count how many leads reached a stage (e.g., "Enrollment count"), you MUST count the non-null values in the corresponding timestamp column. **DO NOT** look for a column with a name like 'Enrollments'.
-    *   **Correct Code:** `df[ts_col_map['Enrolled']].notna().sum()`
-    *   **Incorrect Code:** `df['Enrollments'].sum()`
+1.  **How to Count Stages:** To count how many leads reached a stage (e.g., "Enrollment count"), you MUST count the non-null values in the corresponding timestamp column. Example: `df[ts_col_map['Enrolled']].notna().sum()`
 2.  **Conversion Rate:** (Count of Stage B) / (Count of Stage A).
-3.  **Plotting:**
-    *   For Matplotlib, end with `st.pyplot(plt.gcf())`.
-    *   For Altair, end with `st.altair_chart(chart, use_container_width=True)`.
-4.  **Final Output:** Your final answer MUST be rendered by `print()` for data/text, `st.pyplot()` for matplotlib, or `st.altair_chart()` for altair.
+3.  **Final Output Rendering:** This is the most important rule. How you display the final answer depends on its type:
+    *   **If the final result is a pandas DataFrame**, you MUST display it using `st.dataframe(result_df)`. DO NOT use `print()`.
+    *   **If the final result is a Matplotlib plot**, you MUST display it using `st.pyplot(plt.gcf())`.
+    *   **If the final result is an Altair chart**, you MUST display it using `st.altair_chart(chart, use_container_width=True)`.
+    *   **For any other result (e.g., a number, a string, a list)**, you MUST use `print()`.
 
 --- CONTEXT VARIABLES ---
 
