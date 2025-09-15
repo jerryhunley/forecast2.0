@@ -46,10 +46,7 @@ except Exception as e:
 # --- System Prompts ---
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str):
-    # This function has been rewritten to be syntactically safe and avoid parsing errors.
-    # It builds the prompt by concatenating strings, which is more robust.
-    
-    # Part 1: Static instructions
+    # This function is written with simple string concatenation to be robust.
     prompt_part1 = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
 
 --- AVAILABLE TOOLS ---
@@ -75,7 +72,6 @@ You MUST use the exact function signatures provided below. Do not add or assume 
 - `ordered_stages`: A list of the funnel stage names in order.
 - `ts_col_map`: A dictionary mapping stage names to timestamp columns. Here is the exact dictionary: """
 
-    # Part 2: Dynamic variables safely inserted
     prompt_part2 = f"`{_ts_col_map_str}`\n"
     prompt_part3 = """- `weights`: A dictionary for scoring.
 
@@ -163,34 +159,43 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
                 st.session_state.messages.append({"role": "assistant", "content": f"**Execution Error:**\n```\n{error_traceback}\n```"})
                 st.stop()
 
+    # --- THIS IS THE CORRECTED SECTION ---
     # Turn 2: Generate Summary
     with st.spinner("AI is interpreting the results..."):
         if result_output_str:
             with result_display_area:
                 st.text(result_output_str)
 
-        analysis_context = f"""--- PYTHON CODE USED ---
-```python
-{code_response}
+        # Build strings safely using concatenation to avoid formatting issues
+        analysis_context = "-- PYTHON CODE USED --\n"
+        analysis_context += "```python\n"
+        analysis_context += code_response + "\n"
+        analysis_context += "```\n\n"
+        analysis_context += "--- RAW DATA RESULT ---\n"
+        analysis_context += result_output_str if result_output_str else "A plot was successfully generated."
 
---- RAW DATA RESULT ---
-{result_output_str if result_output_str else "A plot was successfully generated."}
-"""
-full_summarizer_prompt = f"{summarizer_prompt}\n\n--- USER'S QUESTION ---\n{user_prompt}\n\n--- ANALYSIS & RESULT ---\n{analysis_context}\n\n--- YOUR INSIGHTFUL SUMMARY ---"
+        full_summarizer_prompt = (
+            summarizer_prompt +
+            "\n\n--- USER'S QUESTION ---\n" +
+            user_prompt +
+            "\n\n--- ANALYSIS & RESULT ---\n" +
+            analysis_context +
+            "\n\n--- YOUR INSIGHTFUL SUMMARY ---"
+        )
+        
+        try:
+            summary_response = model.generate_content(full_summarizer_prompt)
+            summary_text = summary_response.text
+        except Exception as e:
+            summary_text = f"Could not generate summary: {e}"
 
-    try:
-        summary_response = model.generate_content(full_summarizer_prompt)
-        summary_text = summary_response.text
-    except Exception as e:
-        summary_text = f"Could not generate summary: {e}"
-
-# Display Final Summary
-with st.chat_message("assistant"):
-    st.markdown("**Summary & Insights:**")
-    st.markdown(summary_text)
-
-# Add the full exchange to history for display
-st.session_state.messages.append({
-    "role": "assistant", 
-    "content": f"**Analysis Result:**\n```\n{result_output_str if result_output_str else 'A plot was generated.'}\n```\n**Summary & Insights:**\n{summary_text}"
-})
+    # Display Final Summary
+    with st.chat_message("assistant"):
+        st.markdown("**Summary & Insights:**")
+        st.markdown(summary_text)
+    
+    # Add the full exchange to history for display
+    st.session_state.messages.append({
+        "role": "assistant", 
+        "content": f"**Analysis Result:**\n```\n{result_output_str if result_output_str else 'A plot was generated.'}\n```\n**Summary & Insights:**\n{summary_text}"
+    })
