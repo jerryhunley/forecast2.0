@@ -51,41 +51,37 @@ except Exception as e:
 # --- NEW: More Explicit System Prompt ---
 @st.cache_data
 def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
-    prompt = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
+    prompt = """You are a world-class Python data analyst. Your goal is to answer the user's question by generating a single, executable Python code block.
 
 --- AVAILABLE TOOLS ---
 
-You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
+You have access to a pandas DataFrame named `df` and a set of pre-built, trusted Python functions. You should ALWAYS prefer to use a pre-built function if it is suitable.
 
-1.  **`calculate_grouped_performance_metrics(...)`**: Primary tool for performance analysis.
-2.  **`calculate_avg_lag_generic(...)`**: Calculates average lag time between two stages.
-3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**: For custom analysis.
+1.  **`calculate_grouped_performance_metrics()`**
+    *   **Description:** The primary tool for performance analysis. Calculates metrics for a group.
+    *   **Returns:** A pandas DataFrame.
+    *   **Example Call:** `st.dataframe(calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col='Site', unclassified_label='Unassigned Site'))`
 
---- IMPORTANT BUSINESS DEFINITIONS & CODING RULES ---
+2.  **`calculate_avg_lag_generic()`**
+    *   **Description:** Calculates the average lag time in days between two timestamp columns.
+    *   **Returns:** A number (float).
+    *   **Example Call:** `print(calculate_avg_lag_generic(df, ts_col_map.get('Signed ICF'), ts_col_map.get('Enrolled')))`
 
-1.  **How to Count Stages:** To count how many leads reached a stage (e.g., "Enrollment count"), you MUST count the non-null values in the corresponding timestamp column. Example: `df[ts_col_map['Enrolled']].notna().sum()`
+3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**
+    *   **Description:** For custom analysis where a pre-built tool is not available.
 
-2.  **Time-Period Filtering:** When a user asks for data "in May", "in the last 30 days", or "between date X and date Y", you MUST filter the DataFrame on the relevant **event timestamp column**, not the 'Submission_Month' column.
-    *   **Correct Pattern:** `df[df[ts_col_map['Appointment Scheduled']].dt.month == 5]`
-    *   **Incorrect Pattern:** `df[df['Submission_Month'] == pd.Period('2024-05')]`
+--- IMPORTANT CODING RULES ---
 
-3.  **Time-Series Analysis (e.g., "by week"):** To count events over time, you must resample the relevant timestamp column.
-    *   **Correct Pattern:** First, filter for not-null timestamps, then set that SAME timestamp column as the index before resampling.
-    *   **Example (Weekly ICFs):**
-        ```python
-        icf_ts_col = ts_col_map['Signed ICF']
-        weekly_icfs = df[df[icf_ts_col].notna()].set_index(icf_ts_col).resample('W').size()
-        ```
-
-4.  **Conversion Rate:** (Count of Stage B) / (Count of Stage A).
-
-5.  **Final Output Rendering:** How you display the final answer depends on its type:
-    *   **DataFrame:** Use `st.dataframe(result_df)`. DO NOT use `print()`.
+1.  **DO NOT redefine functions** like `calculate_grouped_performance_metrics` in your code. They are already loaded and available for you to call directly.
+2.  **Time-Period Filtering:** For questions about a specific time (e.g., "in May"), filter the DataFrame on the relevant **event timestamp column**, not 'Submission_Month'. Example: `df[df[ts_col_map['Appointment Scheduled']].dt.month == 5]`
+3.  **Time-Series Analysis:** To count events "by week" or "by month", you must resample the relevant timestamp column. Example: `df[df[ts_col].notna()].set_index(ts_col).resample('W').size()`
+4.  **How to Count Stages:** Count non-null values in the timestamp column. Example: `df[ts_col_map['Enrolled']].notna().sum()`
+5.  **Final Output Rendering:**
+    *   **DataFrame:** Use `st.dataframe(result_df)`.
     *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`.
     *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.
     *   **Other (number, string, list):** Use `print()`.
-
-6.  **DEFENSIVE CODING:** Your code MUST be robust. Before division, check if the denominator is zero. Handle potential `NaN` or `inf` values gracefully.
+6.  **DEFENSIVE CODING:** Always check for division by zero and handle potential `NaN` or `inf` values gracefully.
 
 --- CONTEXT VARIABLES ---
 - `df`: The main pandas DataFrame.
@@ -99,7 +95,7 @@ You MUST use the exact function signatures provided below. Do not add or assume 
 """
     prompt += _df_info
     prompt += "-----------------------------\n\n"
-    prompt += "Your response MUST be a Python code block that starts with ```python and ends with ```. Do not provide any explanation or preamble."
+    prompt += "Your response MUST be a Python code block that starts with ```python and ends with ```. Do not provide any explanation."
     return prompt
 
 @st.cache_data
