@@ -48,35 +48,44 @@ except Exception as e:
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str):
     # This prompt is highly structured and strict, focused only on code generation.
-    return """You are a Python data analysis expert. Your sole purpose is to generate a single, executable Python code block to answer a user's question about a pandas DataFrame named `df`.
+    prompt = """You are a world-class Python data analyst. Your goal is to answer the user's question by generating a single, executable Python code block.
 
 --- AVAILABLE TOOLS ---
-You have access to pre-built functions and libraries. You MUST use the exact function signatures provided.
-1.  `calculate_grouped_performance_metrics()`: For performance reports (e.g., by 'Site'). Returns a DataFrame.
-2.  `calculate_avg_lag_generic()`: For average lag time between two stages. Returns a number.
-3.  `pandas`, `matplotlib`, `altair`: For custom analysis and visualizations.
+You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
+1.  **`calculate_grouped_performance_metrics()`**: For performance reports/breakdowns. Returns a DataFrame.
+2.  **`calculate_avg_lag_generic()`**: For average time/lag between stages. Returns a number.
+3.  **`pandas`, `matplotlib`, `altair`**: For custom analysis and visualizations.
 
 --- CODING RULES ---
 1.  **DO NOT redefine functions.** They are pre-loaded.
-2.  **Time-Period Filtering:** For questions about a specific time (e.g., "in May"), filter on the relevant event timestamp column.
-3.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, calculate monthly totals for the numerator and denominator separately, combine them, then divide.
-4.  **Final Output:**
+2.  **Time-Period Filtering:** For questions about a specific time (e.g., "in May"), filter on the relevant event timestamp column, not 'Submission_Month'.
+3.  **Time-Series Analysis (Counting Events):** To count events "by week" or "by month", you must resample the relevant timestamp column.
+4.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate monthly totals for the numerator and the denominator separately, then combine them before dividing.
+5.  **Final Output Rendering:**
     *   **DataFrame:** Use `st.dataframe(result_df)`.
-    *   **Matplotlib:** End with `st.pyplot(plt.gcf())`. For monthly trends, format the x-axis with `mdates.DateFormatter('%Y-%m')`.
-    *   **Altair:** End with `st.altair_chart(chart, use_container_width=True)`.
+    *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`. For monthly trends, format the x-axis with `mdates.DateFormatter('%Y-%m')`.
+    *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.
     *   **Other (number, string, list):** Use `print()`.
-5.  **DEFENSIVE CODING:** Always check for division by zero and handle potential `NaN` values.
+6.  **DEFENSIVE CODING:** Always check for division by zero and handle potential `NaN` values.
 
 --- CONTEXT VARIABLES ---
-- `df`: The main DataFrame.
-- `ordered_stages`: A list of funnel stages.
-- `ts_col_map`: Dictionary mapping stage names to timestamp columns: """ + f"`{_ts_col_map_str}`" + """
+- `df`: The main pandas DataFrame.
+- `ordered_stages`: A list of the funnel stage names in order.
+- `ts_col_map`: A dictionary mapping stage names to timestamp columns. Here is the exact dictionary: """
+    
+    # --- THIS IS THE CORRECTED PART ---
+    # We construct the string cleanly without invalid f-string mixing
+    prompt += f"`{_ts_col_map_str}`\n"
+    prompt += """- `weights`: A dictionary for scoring.
 
 --- DATAFRAME `df` SCHEMA ---
-""" + _df_info + """
------------------------------\n
-Your response MUST be ONLY the Python code block, starting with ```python and ending with ```."""
-
+"""
+    prompt += _df_info
+    prompt += "-----------------------------\n\n"
+    prompt += "Your response MUST be ONLY the Python code block, starting with ```python and ending with ```."
+    # ------------------------------------
+    
+    return prompt
 # Prompt 2: For interpreting the results
 @st.cache_data
 def get_summarizer_prompt():
