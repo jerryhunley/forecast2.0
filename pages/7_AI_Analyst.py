@@ -57,44 +57,37 @@ def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
 
 You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
 
-1.  **`calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col, unclassified_label)`**
-    *   **Description:** The primary tool for performance analysis. Calculates metrics for a group.
-    *   **Use When:** The user asks for a "performance report", "breakdown", or "summary" of 'Site' or 'UTM Source'.
-    *   **Returns:** A pandas DataFrame.
-
-2.  **`calculate_avg_lag_generic(df, col_from, col_to)`**
-    *   **Description:** Calculates the average lag time in days between two timestamp columns.
-    *   **Returns:** A number (float).
-
-3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**
-    *   **Description:** For custom analysis or visualizations.
-    *   **Use When:** The user asks for a specific plot or a custom data slice.
+1.  **`calculate_grouped_performance_metrics(...)`**: Primary tool for performance analysis.
+2.  **`calculate_avg_lag_generic(...)`**: Calculates average lag time between two stages.
+3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**: For custom analysis.
 
 --- IMPORTANT BUSINESS DEFINITIONS & CODING RULES ---
 
 1.  **How to Count Stages:** To count how many leads reached a stage (e.g., "Enrollment count"), you MUST count the non-null values in the corresponding timestamp column. Example: `df[ts_col_map['Enrolled']].notna().sum()`
 
-2.  **Time-Series Analysis (e.g., "by week", "by month"):** To count events over time, you must resample the relevant timestamp column.
-    *   **Correct Pattern:** First, filter for not-null timestamps, then set that same timestamp column as the index before resampling.
+2.  **Time-Period Filtering:** When a user asks for data "in May", "in the last 30 days", or "between date X and date Y", you MUST filter the DataFrame on the relevant **event timestamp column**, not the 'Submission_Month' column.
+    *   **Correct Pattern:** `df[df[ts_col_map['Appointment Scheduled']].dt.month == 5]`
+    *   **Incorrect Pattern:** `df[df['Submission_Month'] == pd.Period('2024-05')]`
+
+3.  **Time-Series Analysis (e.g., "by week"):** To count events over time, you must resample the relevant timestamp column.
+    *   **Correct Pattern:** First, filter for not-null timestamps, then set that SAME timestamp column as the index before resampling.
     *   **Example (Weekly ICFs):**
         ```python
         icf_ts_col = ts_col_map['Signed ICF']
         weekly_icfs = df[df[icf_ts_col].notna()].set_index(icf_ts_col).resample('W').size()
         ```
 
-3.  **Conversion Rate:** (Count of Stage B) / (Count of Stage A).
+4.  **Conversion Rate:** (Count of Stage B) / (Count of Stage A).
 
-4.  **Final Output Rendering:** How you display the final answer depends on its type:
+5.  **Final Output Rendering:** How you display the final answer depends on its type:
     *   **DataFrame:** Use `st.dataframe(result_df)`. DO NOT use `print()`.
     *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`.
     *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.
     *   **Other (number, string, list):** Use `print()`.
 
-5.  **DEFENSIVE CODING:** Your code MUST be robust. Before division, check if the denominator is zero. Handle potential `NaN` or `inf` values gracefully.
+6.  **DEFENSIVE CODING:** Your code MUST be robust. Before division, check if the denominator is zero. Handle potential `NaN` or `inf` values gracefully.
 
 --- CONTEXT VARIABLES ---
-
-The following variables are pre-loaded and available for your code to use:
 - `df`: The main pandas DataFrame.
 - `ordered_stages`: A list of the funnel stage names in order.
 - `ts_col_map`: A dictionary mapping stage names to their timestamp column names. Here is the exact dictionary: """
