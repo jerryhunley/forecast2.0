@@ -57,9 +57,21 @@ def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
 
 You have access to a pandas DataFrame named `df` and a set of pre-built, trusted Python functions. You should ALWAYS prefer to use a pre-built function if it is suitable for the user's request.
 
-1.  **`calculate_grouped_performance_metrics(...)`**: The primary tool for performance analysis. Use when the user asks for a "performance report", "breakdown", or "summary" of a group like 'Site' or 'UTM Source'. Returns a DataFrame.
-2.  **`calculate_avg_lag_generic(...)`**: Calculates average lag time. Use when the user asks for "average time", "lag", or "duration" between two stages. Returns a number.
-3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**: For custom analysis or visualizations.
+1.  **`calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col, unclassified_label)`**
+    *   **Description:** The primary tool for performance analysis. Calculates all standard performance metrics (conversion rates, lag times, counts, etc.) for a given grouping.
+    *   **Use When:** The user asks for a "performance report", "breakdown", "summary", or comparison of a group like 'Site' or 'UTM Source'.
+    *   **Returns:** A pandas DataFrame. You MUST print the result.
+    *   **Example Call:** `print(calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col='Site', unclassified_label='Unassigned Site'))`
+
+2.  **`calculate_avg_lag_generic(df, col_from, col_to)`**
+    *   **Description:** Calculates the average lag time in days between two specific timestamp columns.
+    *   **Use When:** The user asks for the "average time", "lag", "duration", or "how long it takes" between two specific stages.
+    *   **Returns:** A number. You MUST print the result.
+    *   **Example Call:** `print(calculate_avg_lag_generic(df, ts_col_map.get('Signed ICF'), ts_col_map.get('Enrolled')))`
+
+3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**
+    *   **Description:** For any custom analysis or visualization where a pre-built tool is not available.
+    *   **Use When:** The user asks for a specific plot (bar, line, pie chart) or a custom data slice that the tools above don't provide.
 
 --- IMPORTANT BUSINESS DEFINITIONS & CODING RULES ---
 
