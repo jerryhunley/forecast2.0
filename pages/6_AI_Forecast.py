@@ -108,7 +108,9 @@ with st.expander("Site Activation/Deactivation Dates"):
                 "Activation Date": st.column_config.DateColumn(),
                 "Deactivation Date": st.column_config.DateColumn(),
             },
-            hide_index=True, key="site_activity_editor"
+            hide_index=True,
+            use_container_width=True, # FIX APPLIED
+            key="site_activity_editor"
         )
         for _, row in edited_activity_df.iterrows():
             site_activity_schedule[row['Site']] = {
@@ -131,7 +133,9 @@ with st.expander("Site-Specific Monthly QL Caps"):
                 "Site": st.column_config.TextColumn(disabled=True),
                 "Monthly POF Cap": st.column_config.NumberColumn(min_value=0, step=1)
             },
-            hide_index=True, key="site_caps_editor"
+            hide_index=True,
+            use_container_width=True, # FIX APPLIED
+            key="site_caps_editor"
         )
         for _, row in edited_caps_df.iterrows():
             if pd.notna(row['Monthly POF Cap']):
@@ -143,57 +147,56 @@ with st.expander("Site-Specific Monthly QL Caps"):
 st.divider()
 
 if st.button("🚀 Generate Auto Forecast", type="primary"):
-    # 1. Determine effective rates
-    effective_rates, rates_method_desc = determine_effective_projection_rates(
-        processed_data, ordered_stages, ts_col_map,
-        rate_method, rolling_window, manual_rates, inter_stage_lags
-    )
+    with st.spinner("Calculating forecast..."):
+        # 1. Determine effective rates
+        effective_rates, rates_method_desc = determine_effective_projection_rates(
+            processed_data, ordered_stages, ts_col_map,
+            rate_method, rolling_window, manual_rates, inter_stage_lags
+        )
 
-    # 2. Determine effective lag
-    avg_pof_icf_lag = calculate_avg_lag_generic(processed_data, ts_col_map.get(STAGE_PASSED_ONLINE_FORM), ts_col_map.get(STAGE_SIGNED_ICF))
-    if pd.isna(avg_pof_icf_lag): avg_pof_icf_lag = 30.0 # Default fallback
+        # 2. Determine effective lag
+        avg_pof_icf_lag = calculate_avg_lag_generic(processed_data, ts_col_map.get(STAGE_PASSED_ONLINE_FORM), ts_col_map.get(STAGE_SIGNED_ICF))
+        if pd.isna(avg_pof_icf_lag): avg_pof_icf_lag = 30.0
 
-    # 3. Calculate baseline QL volume
-    ts_pof_col = ts_col_map.get(STAGE_PASSED_ONLINE_FORM)
-    baseline_ql_volume = 50.0 # Default fallback
-    if ts_pof_col and ts_pof_col in processed_data.columns:
-        pof_data = processed_data.dropna(subset=[ts_pof_col])
-        if not pof_data.empty and 'Submission_Month' in pof_data.columns:
-            monthly_counts = pof_data.groupby('Submission_Month').size()
-            if not monthly_counts.empty:
-                baseline_ql_volume = monthly_counts.nlargest(6).mean()
-    
-    # 4. Run primary forecast
-    run_mode_primary = "primary"
-    st.session_state.ai_forecast_primary_results = calculate_ai_forecast_core(
-        goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
-        icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
-        ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
-        site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input=site_caps,
-        site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
-        cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-        run_mode=run_mode_primary, ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
-        ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
-        baseline_monthly_ql_volume_override=baseline_ql_volume
-    )
-    
-    # 5. If primary is unfeasible, run best-case scenario
-    _, _, _, _, is_unfeasible, _ = st.session_state.ai_forecast_primary_results
-    st.session_state.show_best_case = is_unfeasible
-    if is_unfeasible:
-        st.info("Initial forecast is unfeasible. Running a 'best-case' scenario with an extended LPI date...")
-        run_mode_best_case = "best_case_extended_lpi"
-        st.session_state.ai_forecast_best_case_results = calculate_ai_forecast_core(
+        # 3. Calculate baseline QL volume
+        ts_pof_col = ts_col_map.get(STAGE_PASSED_ONLINE_FORM)
+        baseline_ql_volume = 50.0
+        if ts_pof_col and ts_pof_col in processed_data.columns:
+            pof_data = processed_data.dropna(subset=[ts_pof_col])
+            if not pof_data.empty and 'Submission_Month' in pof_data.columns:
+                monthly_counts = pof_data.groupby('Submission_Month').size()
+                if not monthly_counts.empty:
+                    baseline_ql_volume = monthly_counts.nlargest(6).mean()
+        
+        # 4. Run primary forecast
+        st.session_state.ai_forecast_primary_results = calculate_ai_forecast_core(
             goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
             icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
             ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
             site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input=site_caps,
             site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
             cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-            run_mode=run_mode_best_case, ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+            run_mode="primary", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
             ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
             baseline_monthly_ql_volume_override=baseline_ql_volume
         )
+        
+        # 5. If primary is unfeasible, run best-case scenario
+        _, _, _, _, is_unfeasible, _ = st.session_state.ai_forecast_primary_results
+        st.session_state.show_best_case = is_unfeasible
+        if is_unfeasible:
+            st.info("Initial forecast is unfeasible. Running a 'best-case' scenario with an extended LPI date...")
+            st.session_state.ai_forecast_best_case_results = calculate_ai_forecast_core(
+                goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
+                icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
+                ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
+                site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input=site_caps,
+                site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
+                cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
+                run_mode="best_case_extended_lpi", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+                ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
+                baseline_monthly_ql_volume_override=baseline_ql_volume
+            )
 
 
 # --- Display Results ---
@@ -221,8 +224,8 @@ if results_to_show:
         st.subheader("Forecasted Monthly Performance")
         df_display = df.copy()
         df_display.rename(columns={'Target_QLs_POF': 'Planned QLs (POF)'}, inplace=True)
-        st.dataframe(df_display)
+        st.dataframe(df_display, use_container_width=True) # FIX APPLIED
 
     if site_df is not None and not site_df.empty:
         st.subheader("Forecasted Site-Level Performance")
-        st.dataframe(site_df)
+        st.dataframe(site_df, use_container_width=True) # FIX APPLIED

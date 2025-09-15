@@ -102,7 +102,7 @@ if projection_results_df is not None and not projection_results_df.empty:
     for col in ['Forecasted_Qual_Referrals', 'Projected_ICF_Landed']:
         if col in display_df: display_df[col] = display_df[col].map('{:,.0f}'.format)
 
-    st.dataframe(display_df[final_cols])
+    st.dataframe(display_df[final_cols], use_container_width=True)
 
     st.subheader("Projected ICFs Landed Over Time")
     chart_data = projection_results_df[['Projected_ICF_Landed']].copy()
@@ -123,7 +123,7 @@ st.divider()
 
 st.subheader("Site-Level Monthly Projections")
 if site_level_proj_df is not None and not site_level_proj_df.empty:
-    st.dataframe(site_level_proj_df)
+    st.dataframe(site_level_proj_df, use_container_width=True)
     try:
         csv_data = site_level_proj_df.reset_index().to_csv(index=False).encode('utf-8')
         st.download_button("Download Site-Level Projections", csv_data, "site_level_projections.csv", "text/csv", key='dl_site_projections')

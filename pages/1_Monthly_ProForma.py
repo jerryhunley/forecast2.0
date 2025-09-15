@@ -36,7 +36,7 @@ if processed_data is not None and not processed_data.empty and ad_spend_dict:
                   ("{:.1%}" if '%' in idx else "{:,.0f}"))
             for idx in proforma_display.index
         }
-        st.dataframe(proforma_display.style.format(format_dict, na_rep='-'))
+        st.dataframe(proforma_display.style.format(format_dict, na_rep='-'), use_container_width=True)
         try:
             csv_data = proforma_df.reset_index().to_csv(index=False).encode('utf-8')
             st.download_button(

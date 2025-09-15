@@ -61,7 +61,7 @@ if not utm_source_metrics_df.empty:
 
         if not final_ad_display.empty:
             formatted_df = format_performance_df(final_ad_display)
-            st.dataframe(formatted_df, hide_index=True)
+            st.dataframe(formatted_df, hide_index=True, use_container_width=True)
             try:
                 csv_data = final_ad_display.to_csv(index=False).encode('utf-8')
                 st.download_button("Download UTM Source Performance", csv_data, "utm_source_performance.csv", "text/csv", key='dl_ad_source')
@@ -115,7 +115,7 @@ if "UTM Medium" in processed_data.columns:
 
             if not final_combo_display.empty:
                 formatted_df = format_performance_df(final_combo_display)
-                st.dataframe(formatted_df, hide_index=True)
+                st.dataframe(formatted_df, hide_index=True, use_container_width=True)
                 try:
                     csv_data = final_combo_display.to_csv(index=False).encode('utf-8')
                     st.download_button("Download UTM Source/Medium Performance", csv_data, "utm_source_medium_performance.csv", "text/csv", key='dl_ad_combo')

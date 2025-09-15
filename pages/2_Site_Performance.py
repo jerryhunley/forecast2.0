@@ -37,7 +37,7 @@ if site_metrics is not None and not site_metrics.empty and weights:
         final_display_df = ranked_sites_df[display_cols_exist]
         if not final_display_df.empty:
             formatted_df = format_performance_df(final_display_df)
-            st.dataframe(formatted_df, hide_index=True)
+            st.dataframe(formatted_df, hide_index=True, use_container_width=True)
             try:
                 csv_data = final_display_df.to_csv(index=False).encode('utf-8')
                 st.download_button("Download Site Ranking Data", csv_data, "site_performance_ranking.csv", "text/csv", key='download_site_perf')

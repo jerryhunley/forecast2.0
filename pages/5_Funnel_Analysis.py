@@ -110,7 +110,7 @@ if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_ana
     st.subheader("Projected Monthly Landings (Future)")
     results_df = results['results_df']
     if not results_df.empty:
-        st.dataframe(results_df[['Projected_ICF_Landed', 'Projected_Enrollments_Landed']].style.format("{:,.0f}"))
+        st.dataframe(results_df[['Projected_ICF_Landed', 'Projected_Enrollments_Landed']].style.format("{:,.0f}"), use_container_width=True)
 
         st.subheader("Cumulative Future Projections Over Time")
         chart_df = results_df[['Cumulative_ICF_Landed', 'Cumulative_Enrollments_Landed']].copy()
