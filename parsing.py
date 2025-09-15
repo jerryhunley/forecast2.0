@@ -5,6 +5,7 @@ import io
 import re
 from datetime import datetime
 
+# In parsing.py
 @st.cache_data
 def parse_funnel_definition(uploaded_file):
     """
@@ -12,16 +13,15 @@ def parse_funnel_definition(uploaded_file):
     """
     if uploaded_file is None: return None, None, None
     try:
-        # Reset buffer to the beginning, vital for Streamlit's file handling
         uploaded_file.seek(0)
+        # --- FIX: Decode with 'utf-8-sig' to automatically handle the BOM character ---
         bytes_data = uploaded_file.getvalue()
-        stringio = io.StringIO(bytes_data.decode("utf-8", errors='replace'))
+        stringio = io.StringIO(bytes_data.decode("utf-8-sig", errors='replace'))
         df_funnel_def = pd.read_csv(stringio, sep=None, engine='python', header=None)
 
         parsed_funnel_definition = {}; parsed_ordered_stages = []; ts_col_map = {}
         for col_idx in df_funnel_def.columns:
             column_data = df_funnel_def[col_idx]
-            # --- FIX #1: Correctly index the first row for the stage name ---
             stage_name = column_data.iloc[0]
             if pd.isna(stage_name) or str(stage_name).strip() == "": continue
 
