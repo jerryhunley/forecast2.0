@@ -17,13 +17,15 @@ from helpers import format_performance_df
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
-st.title("🤖 Conversational AI Analyst")
+st.title("🤖 Tool-Using AI Analyst")
 st.info("""
-Ask questions about your data. The AI will write and execute code, then provide a natural language summary of the results.
+This AI Analyst uses the app's own calculation functions and best practices to answer questions.
+This ensures consistency with the other pages. It can still write custom code for unique requests.
 
 **Example questions:**
-- "What's the overall ICF to Enrollment rate?"
-- "Show me a bar chart of the top 5 sites by enrollment count and tell me what it means."
+- "Show me the full site performance report as a table."
+- "What's the trend in Sent to Site rate over the past 3 months?"
+- "Create a bar chart of the top 5 sites by enrollment count."
 """)
 
 # --- Page Guard ---
@@ -47,24 +49,33 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# --- System Prompts ---
-
+# --- System Prompt with All Rules ---
 @st.cache_data
-def get_coder_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
+def get_tool_prompt(_df_info, _ts_col_map_str, _ordered_stages_str):
     prompt = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
 
 --- AVAILABLE TOOLS ---
 
 You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
-1.  **`calculate_grouped_performance_metrics()`**: For performance reports/breakdowns.
-2.  **`calculate_avg_lag_generic()`**: For average time/lag between stages.
-3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**: For custom analysis.
+
+1.  **`calculate_grouped_performance_metrics()`**
+    *   **Description:** The primary tool for performance analysis. Calculates metrics for a group.
+    *   **Returns:** A pandas DataFrame.
+    *   **Example Call:** `st.dataframe(calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, grouping_col='Site', unclassified_label='Unassigned Site'))`
+
+2.  **`calculate_avg_lag_generic()`**
+    *   **Description:** Calculates the average lag time in days between two timestamp columns.
+    *   **Returns:** A number (float).
+    *   **Example Call:** `print(calculate_avg_lag_generic(df, ts_col_map.get('Signed ICF'), ts_col_map.get('Enrolled')))`
+
+3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**
+    *   **Description:** For custom analysis where a pre-built tool is not available.
 
 --- IMPORTANT CODING RULES ---
 
-1.  **DO NOT redefine functions.** They are already available for you to call.
-2.  **Time-Period Filtering:** For questions about a specific time (e.g., "in May"), filter the DataFrame on the relevant **event timestamp column**, not 'Submission_Month'.
-3.  **Time-Series Analysis (Counting Events):** To count events "by week" or "by month", you must resample the relevant timestamp column.
+1.  **DO NOT redefine functions** like `calculate_grouped_performance_metrics` in your code. They are already loaded and available for you to call directly.
+2.  **Time-Period Filtering:** For questions about a specific time (e.g., "in May"), filter the DataFrame on the relevant **event timestamp column**, not 'Submission_Month'. Example: `df[df[ts_col_map['Appointment Scheduled']].dt.month == 5]`
+3.  **Time-Series Analysis (Counting Events):** To count events "by week" or "by month", you must resample the relevant timestamp column. Example: `df[df[ts_col].notna()].set_index(ts_col).resample('W').size()`
 4.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend (e.g., "Sent to Site rate over time"), you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.
     *   **Correct Pattern:**
         ```python
@@ -76,8 +87,7 @@ You MUST use the exact function signatures provided below. Do not add or assume 
         if not rate_df.empty:
             rate_df['Rate'] = rate_df.apply(lambda row: row['Numerator'] / row['Denominator'] if row['Denominator'] > 0 else 0, axis=1)
         ```
-
-5.  **How to Count Stages:** Count non-null values in the timestamp column.
+5.  **How to Count Stages:** Count non-null values in the timestamp column. Example: `df[ts_col_map['Enrolled']].notna().sum()`
 6.  **Final Output Rendering:**
     *   **DataFrame:** Use `st.dataframe(result_df)`.
     *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`. **For monthly trend plots, format the x-axis labels to show only the month and year (e.g., 'YYYY-MM').**
@@ -102,12 +112,9 @@ You MUST use the exact function signatures provided below. Do not add or assume 
 
 @st.cache_data
 def get_summarizer_prompt():
-    # --- NEW: This prompt is for the second API call: generating the summary. ---
     return """You are a helpful and insightful data analyst for a clinical trial recruitment company.
 Your goal is to provide a concise, natural language summary of a data analysis result.
-
 You will be given the user's original question and the direct output (a number, table, or confirmation of a plot) that was generated by a code-executing agent.
-
 Based on this information, provide a one or two-sentence summary that explains the key insight to a manager. Do not just repeat the numbers; interpret what they mean.
 """
 
@@ -117,7 +124,7 @@ def get_df_info(df):
     df.info(buf=buffer)
     return buffer.getvalue()
 
-coder_prompt = get_coder_prompt(get_df_info(df), str(ts_col_map))
+coder_prompt = get_tool_prompt(get_df_info(df), str(ts_col_map), str(ordered_stages))
 summarizer_prompt = get_summarizer_prompt()
 
 # --- Main Chat Logic ---
@@ -133,7 +140,7 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
     with st.chat_message("user"):
         st.markdown(user_prompt)
 
-    # --- Turn 1: Generate Code ---
+    # Turn 1: Generate Code
     with st.spinner("AI is generating code..."):
         try:
             full_coder_prompt = coder_prompt + f"\n\nUser Question: {user_prompt}"
@@ -143,7 +150,7 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
             st.error(f"An error occurred while generating code: {e}")
             st.stop()
     
-    # --- Execute Code and Capture Result ---
+    # Execute Code and Capture Result
     with st.spinner("Executing code..."):
         result_output = None
         with st.chat_message("assistant"):
@@ -153,8 +160,8 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
             try:
                 execution_globals = {
                     "__builtins__": __builtins__, "st": st, "pd": pd, "plt": plt, "alt": alt, "mdates": mdates,
-                    "df": df, "ordered_stages": ordered_stages, "ts_col_map": ts_col_map, "weights": weights,
-                    "calculate_grouped_performance_metrics": calculate_grouped_performance_metrics,
+                    "df": df, "ordered_stages": ordered_stages, "ts_col_map": ts_col_map,
+                    "weights": weights, "calculate_grouped_performance_metrics": calculate_grouped_performance_metrics,
                     "calculate_avg_lag_generic": calculate_avg_lag_generic,
                     "score_performance_groups": score_performance_groups,
                     "format_performance_df": format_performance_df
@@ -177,7 +184,7 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
                 st.session_state.messages.append({"role": "assistant", "content": f"**Execution Error:**\n```\n{error_traceback}\n```"})
                 st.stop()
 
-    # --- Turn 2: Generate Summary ---
+    # Turn 2: Generate Summary
     with st.spinner("AI is analyzing the results..."):
         if result_output:
             summary_context = f"The code produced the following text output:\n```\n{result_output}\n```"
@@ -197,7 +204,7 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
         except Exception as e:
             summary_text = f"Could not generate summary: {e}"
 
-    # --- Display Final Summary ---
+    # Display Final Summary
     with st.chat_message("assistant"):
         st.markdown(summary_text)
     
