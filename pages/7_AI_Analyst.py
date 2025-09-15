@@ -134,27 +134,35 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
         except Exception as e:
             st.error(f"An error occurred while generating code: {e}")
             st.stop()
-    
+
     with st.spinner("Executing code..."):
         try:
+            # --- NEW: Expanded Execution Environment with common submodules ---
+            import matplotlib.dates as mdates # Import the missing module
+            
             execution_globals = {
                 "__builtins__": __builtins__, "st": st, "pd": pd, "plt": plt, "alt": alt,
                 "df": df, "ordered_stages": ordered_stages, "ts_col_map": ts_col_map,
                 "weights": weights, "calculate_grouped_performance_metrics": calculate_grouped_performance_metrics,
                 "calculate_avg_lag_generic": calculate_avg_lag_generic,
                 "score_performance_groups": score_performance_groups,
-                "format_performance_df": format_performance_df
+                "format_performance_df": format_performance_df,
+                "mdates": mdates # Make mdates available to the AI's code
             }
             
+            # Use st.expander to show the output in a clean way
             with st.chat_message("assistant"):
                 with st.expander("Execution Result", expanded=True):
+                    # Redirect print statements to a string buffer
                     output_buffer = StringIO()
                     import sys
                     original_stdout = sys.stdout
                     sys.stdout = output_buffer
                     
+                    # Execute the code
                     exec(code_response, execution_globals)
                     
+                    # Restore stdout
                     sys.stdout = original_stdout
                     result_output = output_buffer.getvalue()
                     
