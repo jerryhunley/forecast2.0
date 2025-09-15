@@ -5,7 +5,7 @@ from datetime import datetime
 import io
 import os
 
-# --- CORRECTED DIRECT IMPORTS ---
+# Direct imports from modules in the root directory
 from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
@@ -22,6 +22,7 @@ st.title("📊 Recruitment Forecasting Tool")
 st.header("Home & Data Setup")
 
 # --- Session State Initialization ---
+# (This section remains unchanged, no need to copy it if it's already there)
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
@@ -52,7 +53,10 @@ for key in required_keys:
 # --- Sidebar for Global Settings and Uploads ---
 with st.sidebar:
     st.header("⚙️ Setup")
-    # ... (The rest of the sidebar code is fine, no changes needed here) ...
+
+    # --- NEW: Added a welcome message and instructions to the sidebar ---
+    st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
+
     st.warning("🔒 **Privacy Notice:** Do not upload files containing PII.", icon="⚠️")
     pii_checkbox = st.checkbox("I confirm my files do not contain PII.")
 
@@ -66,7 +70,9 @@ with st.sidebar:
 
     st.divider()
 
-    with st.expander("Historical Ad Spend", expanded=True):
+    # --- NEW: Grouped all settings into collapsible expanders ---
+    with st.expander("⚙️ Global Assumptions & Weights"):
+        st.subheader("Historical Ad Spend")
         edited_df = st.data_editor(
             st.session_state.historical_spend_df,
             num_rows="dynamic",
@@ -90,10 +96,10 @@ with st.sidebar:
         if valid_entries:
             st.session_state.ad_spend_input_dict = temp_spend_dict
             st.session_state.historical_spend_df = edited_df
+        
+        st.divider()
 
-    st.divider()
-
-    with st.expander("Performance Scoring Weights"):
+        st.subheader("Performance Scoring Weights")
         weights = {
             "Qual to Enrollment %": st.slider("Qual (POF) -> Enrollment %", 0, 100, 10),
             "ICF to Enrollment %": st.slider("ICF -> Enrollment %", 0, 100, 10),
@@ -111,9 +117,7 @@ with st.sidebar:
         st.session_state.weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
 
 
-    st.divider()
-    
-    with st.expander("Projection & AI Assumptions"):
+    with st.expander("📈 Projection & AI Assumptions"):
         st.subheader("General Settings")
         st.session_state.proj_horizon = st.number_input("Projection Horizon (Months)", 1, 48, 12)
         st.session_state.proj_goal_icf = st.number_input("Goal ICFs (for 'Projections' Page)", 1, 10000, 100)
@@ -149,15 +153,13 @@ with st.sidebar:
         st.session_state.ai_ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5)
 
 # --- Main Page Content & Data Processing Trigger ---
+# ... (This section remains unchanged) ...
 if uploaded_referral_file and uploaded_funnel_def_file:
     st.info("Files uploaded. Click the button below to process and load the data.")
     if st.button("Process Uploaded Data", type="primary"):
         with st.spinner("Parsing files and processing data... This may take a moment."):
             try:
-                # --- CORRECTED FILE HANDLING LOGIC ---
                 referral_bytes_data = uploaded_referral_file.getvalue()
-
-                # PII Check using the byte data in memory
                 header_df = pd.read_csv(io.BytesIO(referral_bytes_data), nrows=0, low_memory=False)
                 pii_cols = [c for c in ["notes", "first name", "last name", "name", "phone", "email"] if c in [str(h).lower().strip() for h in header_df.columns]]
 
@@ -169,7 +171,6 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                 funnel_def, ordered_st, ts_map = parse_funnel_definition(uploaded_funnel_def_file)
                 
                 if funnel_def and ordered_st and ts_map:
-                    # Use the same in-memory byte data for the main read
                     raw_df = pd.read_csv(io.BytesIO(referral_bytes_data))
                     processed_data = preprocess_referral_data(raw_df, funnel_def, ordered_st, ts_map)
 
@@ -189,11 +190,20 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                     st.error("Funnel definition parsing failed. Please check the funnel file.")
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
-                st.exception(e) # Also print the full traceback for better debugging
+                st.exception(e)
 
 # --- Instructions for the User ---
 if st.session_state.data_processed_successfully:
     st.success("Data is loaded and ready.")
     st.info("👈 Please select an analysis page from the sidebar to view the results.")
 else:
-    st.info("👋 Welcome! Please upload your Referral Data and Funnel Definition files, then click 'Process Uploaded Data' to begin.")
+    # --- NEW: Improved welcome message on the main page ---
+    st.info("👋 **Welcome to the Recruitment Forecasting Tool!**")
+    st.write("")
+    st.write("This application helps you analyze historical recruitment data to forecast future performance. To get started:")
+    st.markdown("""
+        1.  **Confirm No PII**: Check the box in the sidebar to confirm your files are free of Personally Identifiable Information.
+        2.  **Upload Your Data**: Use the file uploaders in the sidebar to provide your referral data and funnel definition files.
+        3.  **Process Data**: Click the "Process Uploaded Data" button that will appear here.
+        4.  **Explore**: Once processing is complete, the analysis pages will become available in the sidebar.
+    """)
