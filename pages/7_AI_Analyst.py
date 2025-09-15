@@ -1,6 +1,7 @@
 # pages/7_AI_Analyst.py
 import streamlit as st
 import pandas as pd
+import numpy as np
 import google.generativeai as genai
 from io import StringIO
 import traceback
@@ -46,44 +47,37 @@ except Exception as e:
 # --- System Prompts ---
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str):
-    # This function is written with simple string concatenation to be robust.
-    prompt_part1 = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
-
---- AVAILABLE TOOLS ---
-You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
-1.  **`calculate_grouped_performance_metrics()`**: For performance reports/breakdowns.
-2.  **`calculate_avg_lag_generic()`**: For average time/lag between stages.
-3.  **`pandas` and Visualization Libraries (`matplotlib`, `altair`)**: For custom analysis.
-
---- CODING RULES ---
-1.  **DO NOT redefine functions.** They are pre-loaded.
-2.  **Time-Period Filtering:** For questions about a specific time (e.g., "in May"), filter on the relevant **event timestamp column**, not 'Submission_Month'.
-3.  **Time-Series Analysis (Counting Events):** To count events "by week" or "by month", you must resample the relevant timestamp column.
-4.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.
-5.  **Final Output Rendering:**
-    *   **DataFrame:** Use `st.dataframe(result_df)`.
-    *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`. For monthly trends, format the x-axis with `mdates.DateFormatter('%Y-%m')`.
-    *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.
-    *   **Other (number, string, list):** Use `print()`.
-6.  **DEFENSIVE CODING:** Always check for division by zero and handle potential `NaN` or `inf` values gracefully.
-
---- CONTEXT VARIABLES ---
-- `df`: The main pandas DataFrame.
-- `ordered_stages`: A list of the funnel stage names in order.
-- `ts_col_map`: A dictionary mapping stage names to timestamp columns. Here is the exact dictionary: """
-
-    prompt_part2 = f"`{_ts_col_map_str}`\n"
-    prompt_part3 = """- `weights`: A dictionary for scoring.
-
---- DATAFRAME `df` SCHEMA ---
-"""
-    prompt_part4 = _df_info
-    prompt_part5 = """
------------------------------
-
-Your response MUST be ONLY the Python code block, starting with ```python and ends with ```."""
-
-    return prompt_part1 + prompt_part2 + prompt_part3 + prompt_part4 + prompt_part5
+    # This prompt is built with safe string concatenation to avoid formatting errors.
+    prompt_parts = [
+        "You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.",
+        "\n--- AVAILABLE TOOLS ---",
+        "You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.",
+        "1.  **`calculate_grouped_performance_metrics()`**: For performance reports/breakdowns.",
+        "2.  **`calculate_avg_lag_generic()`**: For average time/lag between stages.",
+        "3.  **`pandas`, `matplotlib`, `altair`, and `numpy`**: For custom analysis and visualizations.",
+        "\n--- CODING RULES ---",
+        "1.  **DO NOT redefine functions.** They are pre-loaded.",
+        "2.  **Time-Period Filtering:** For questions about a specific time (e.g., \"in May\"), filter the DataFrame on the relevant **event timestamp column**, not 'Submission_Month'.",
+        "3.  **Time-Series Analysis (Counting Events):** To count events \"by week\" or \"by month\", you must resample the relevant timestamp column.",
+        "4.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.",
+        "5.  **Final Output Rendering:**",
+        "    *   **DataFrame:** Use `st.dataframe(result_df)`.",
+        "    *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`. For monthly trends, format the x-axis with `mdates.DateFormatter('%Y-%m')`.",
+        "    *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.",
+        "    *   **Other (number, string, list):** Use `print()`.",
+        "6.  **DEFENSIVE CODING:** Always check for division by zero. For missing or infinite values, you MUST use the NumPy library, which is available as `np`. Use `np.nan` for \"Not a Number\" and `np.inf` for infinity. Do NOT use `pd.inf` or `pd.nan`.",
+        "\n--- CONTEXT VARIABLES ---",
+        "- `df`: The main pandas DataFrame.",
+        "- `np`: The NumPy library, imported as `np`.",
+        "- `ordered_stages`: A list of the funnel stage names in order.",
+        f"- `ts_col_map`: A dictionary mapping stage names to timestamp columns. Here is the exact dictionary: `{_ts_col_map_str}`",
+        "- `weights`: A dictionary for scoring.",
+        "\n--- DATAFRAME `df` SCHEMA ---",
+        _df_info,
+        "-----------------------------\n",
+        "Your response MUST be ONLY the Python code block, starting with ```python and ends with ```."
+    ]
+    return "\n".join(prompt_parts)
 
 @st.cache_data
 def get_summarizer_prompt():
@@ -102,7 +96,6 @@ def get_df_info(df):
 coder_prompt = get_coder_prompt(get_df_info(df), str(ts_col_map))
 summarizer_prompt = get_summarizer_prompt()
 
-# --- Main Chat Logic ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -115,7 +108,6 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
     with st.chat_message("user"):
         st.markdown(user_prompt)
 
-    # Turn 1: Generate Code
     with st.spinner("AI is generating analysis code..."):
         try:
             full_coder_prompt = coder_prompt + f"\n\nUser Question: {user_prompt}"
@@ -125,7 +117,6 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
             st.error(f"An error occurred while generating code: {e}")
             st.stop()
     
-    # Execute Code and Capture Result
     result_output_str = ""
     with st.spinner("Executing code..."):
         with st.chat_message("assistant"):
@@ -134,7 +125,7 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
 
             try:
                 execution_globals = {
-                    "__builtins__": __builtins__, "st": st, "pd": pd, "plt": plt, "alt": alt, "mdates": mdates,
+                    "__builtins__": __builtins__, "st": st, "pd": pd, "np": np, "plt": plt, "alt": alt, "mdates": mdates,
                     "df": df, "ordered_stages": ordered_stages, "ts_col_map": ts_col_map, "weights": weights,
                     "calculate_grouped_performance_metrics": calculate_grouped_performance_metrics,
                     "calculate_avg_lag_generic": calculate_avg_lag_generic, "score_performance_groups": score_performance_groups,
@@ -159,8 +150,6 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
                 st.session_state.messages.append({"role": "assistant", "content": f"**Execution Error:**\n```\n{error_traceback}\n```"})
                 st.stop()
 
-    # --- THIS IS THE CORRECTED SECTION ---
-    # Turn 2: Generate Summary
     with st.spinner("AI is interpreting the results..."):
         if result_output_str:
             with result_display_area:
@@ -189,12 +178,10 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
         except Exception as e:
             summary_text = f"Could not generate summary: {e}"
 
-    # Display Final Summary
     with st.chat_message("assistant"):
         st.markdown("**Summary & Insights:**")
         st.markdown(summary_text)
     
-    # Add the full exchange to history for display
     st.session_state.messages.append({
         "role": "assistant", 
         "content": f"**Analysis Result:**\n```\n{result_output_str if result_output_str else 'A plot was generated.'}\n```\n**Summary & Insights:**\n{summary_text}"
