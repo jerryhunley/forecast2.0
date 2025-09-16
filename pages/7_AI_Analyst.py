@@ -10,7 +10,7 @@ import altair as alt
 import matplotlib.dates as mdates
 import re
 import plotly.graph_objects as go
-import plotly.express as px # <-- FIX: IMPORT PLOTLY EXPRESS
+import plotly.express as px
 import sys
 
 # Direct imports from modules in the root directory
@@ -24,7 +24,7 @@ st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
 st.title("🤖 Strategic AI Analyst")
 st.info("""
-This advanced AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
+This AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
 """)
 
 # --- Page Guard ---
@@ -48,57 +48,39 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# --- System Prompts for the Advanced Agent ---
-@st.cache_data
-def get_df_info(df):
-    buffer = StringIO()
-    df.info(buf=buffer)
-    return buffer.getvalue()
-
+# --- System Prompts ---
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
-    # This is the final, most robust version of the prompt, using a Chain-of-Thought example.
+    # This prompt uses a strict Chain-of-Thought (CoT) and forces the AI to state its column choices.
     prompt_parts = [
         "You are an expert Python data analyst. Your goal is to answer a user's question by generating a 'Thought' process and then the `Code` to execute it.",
         "\n--- RESPONSE FORMAT ---",
         "You MUST respond in two parts:",
-        "1.  **Thought:** A step-by-step thought process explaining your plan. You MUST explicitly state the full, exact column and variable names you will use.",
+        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. **You MUST explicitly state the full, exact column names you will use.**",
         "2.  **Code:** A single, executable Python code block that implements your plan.",
-        
-        "\n--- COMPLETE EXAMPLE OF A COMPLEX REQUEST ---",
-        "User Request: \"Show me in a line graph the enrollment trend for each site in the study by week\"",
-        "Thought:",
-        "1.  The user wants a weekly trend of 'enrollments' for each 'site'.",
-        "2.  I have two main tools: the pre-computed `site_performance_df` and the raw `df`.",
-        "3.  I will first check the schema of `site_performance_df`. It contains total 'Enrollment Count' per site, but it does NOT have weekly data. Therefore, it is not suitable for this request.",
-        "4.  I must fall back to using the raw `df` to get the necessary weekly granularity.",
-        "5.  The Golden Rule states that analysis of 'enrollments' MUST use the enrollment timestamp. I will use the `ts_col_map` to find the correct column name, which is `'TS_Enrolled'`.",
-        "6.  My plan is to group the raw `df` by 'Site' and then use `pd.Grouper` on the `'TS_Enrolled'` column with a weekly frequency (`freq='W'`) to get the counts.",
-        "7.  Finally, I will use `plotly.express` (imported as `px`) to create a line chart of the results, with each site as a different color.",
+        "\n--- EXAMPLE ---",
+        "User Request: \"How many total enrollments were there?\"",
+        "Thought: The user wants the total number of enrollments. The Golden Rule says I must use the timestamp for this event. I will use the `ts_col_map` to find the correct column for 'Enrolled', which is `TS_Enrolled`. I will then count the non-null values in that specific column.",
         "```python",
-        "import plotly.express as px",
         "enrollment_col = ts_col_map.get('Enrolled')",
-        "if enrollment_col and enrollment_col in df.columns:",
-        "    weekly_enrollments = df.dropna(subset=[enrollment_col]).copy()",
-        "    weekly_enrollments_by_site = weekly_enrollments.groupby(['Site', pd.Grouper(key=enrollment_col, freq='W')]).size().reset_index(name='Enrollment Count')",
-        "    fig = px.line(weekly_enrollments_by_site, x=enrollment_col, y='Enrollment Count', color='Site', title='Weekly Enrollment Trend by Site')",
-        "    st.plotly_chart(fig, use_container_width=True)",
+        "if enrollment_col:",
+        "    enrollment_count = df[enrollment_col].notna().sum()",
+        "    print(f'Total Enrollments: {enrollment_count}')",
         "else:",
-        "    print('Enrollment data is not available.')",
+        "    print('Enrollment timestamp column not found.')",
         "```",
-        
+        "\n--- THE GOLDEN RULE OF ANALYSIS ---",
+        "When a user asks to analyze a specific event or stage (e.g., 'enrollments', 'Sent To Site'), your analysis MUST be based on the timestamp of THAT SPECIFIC EVENT.",
         "\n--- AVAILABLE VARIABLES & DATAFRAMES ---",
         "1.  `site_performance_df`: Pre-computed DataFrame with aggregate site metrics.",
         "2.  `utm_performance_df`: Pre-computed DataFrame with aggregate UTM metrics.",
         "3.  `df`: The raw master DataFrame.",
         "4.  `ts_col_map`: Dictionary mapping stage names to timestamp columns.",
-        
         "\n--- DATAFRAME SCHEMAS ---",
         f"**`site_performance_df` Schema:**\n{_site_perf_info}",
         f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
         "\n--- RAW `df` SCHEMA ---",
-        _df_info,
-        "-----------------------------",
+        _df_info
     ]
     return "\n".join(prompt_parts)
 
@@ -113,87 +95,35 @@ You will be given the user's original complex question, the AI's thought process
 - **Conclude with a clear recommendation** or key takeaway.
 """
 
+@st.cache_data
+def get_df_info(df):
+    buffer = StringIO()
+    df.info(buf=buffer)
+    return buffer.getvalue()
+
 # --- Main Chat Logic ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "agent_run" not in st.session_state:
-    st.session_state.agent_run = {"running": False}
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 if user_prompt := st.chat_input("Ask a question about your data..."):
-    # Start a new analysis run
-    st.session_state.messages = [{"role": "user", "content": user_prompt}]
-    st.session_state.agent_run = {
-        "running": True,
-        "plan": None,
-        "scratchpad": "",
-        "summary": None,
-    }
-    st.rerun()
+    st.session_state.messages.append({"role": "user", "content": user_prompt})
+    with st.chat_message("user"):
+        st.markdown(user_prompt)
 
-if st.session_state.agent_run and st.session_state.agent_run["running"]:
-    agent = st.session_state.agent_run
-    user_prompt = st.session_state.messages[-1]["content"]
-    
-    # AGENTIC WORKFLOW
-    if not agent["plan"]:
-        with st.chat_message("assistant"):
-            with st.spinner("Step 1/3: Decomposing question and forming a plan..."):
-                try:
-                    site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
-                    utm_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'UTM Source', 'Unclassified Source')
-                    coder_prompt = get_coder_prompt(get_df_info(df), str(ts_col_map), get_df_info(site_perf_df), get_df_info(utm_perf_df))
-                    
-                    full_planner_prompt = get_planner_prompt() + f"\n\nUser Question: {user_prompt}"
-                    # This part of the code is not used in the provided version, but is kept for completeness.
-                    # This is the full code for the AI Analyst page, including the planner and critique prompts.
-                    # The planner and critique prompts are not used in this version of the code.
-                    # The code is using the coder prompt directly.
-                    # This is the full code for the AI Analyst page, including the planner and critique prompts.
-                    # The planner and critique prompts are not used in this version of the code.
-                    # The code is using the coder prompt directly.
-
-                except Exception as e:
-                    st.error(f"An error occurred while creating the initial plan: {e}")
-                    st.stop()
+    with st.chat_message("assistant"):
+        with st.spinner("Pre-calculating business reports and forming a plan..."):
+            site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
+            utm_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'UTM Source', 'Unclassified Source')
+            site_perf_info = get_df_info(site_perf_df)
+            utm_perf_info = get_df_info(utm_perf_df)
             
-            with st.spinner("Step 2/3: Reviewing and refining the plan for errors..."):
-                try:
-                    # This part of the code is not used in the provided version, but is kept for completeness.
-                    # The code is using the coder prompt directly.
-                    # This is the full code for the AI Analyst page, including the planner and critique prompts.
-                    # The planner and critique prompts are not used in this version of the code.
-                    # The code is using the coder prompt directly.
-
-                except Exception as e:
-                    st.error(f"An error occurred while refining the plan: {e}")
-                    st.stop()
-        st.rerun()
-
-    if not agent["summary"]:
-        with st.chat_message("assistant"):
-            with st.expander("View AI's Thought Process and Code", expanded=True):
-                st.markdown("**User's Request:**")
-                st.info(user_prompt)
-                
-        # --- THIS IS THE CORRECTED EXECUTION BLOCK ---
-        site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
-        utm_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'UTM Source', 'Unclassified Source')
-        
-        coder_prompt_template = get_coder_prompt(get_df_info(df), str(ts_col_map), get_df_info(site_perf_df), get_df_info(utm_perf_df))
-        
-        execution_globals = {
-            "__builtins__": __builtins__, "st": st, "pd": pd, "np": np, "plt": plt, "alt": alt, "mdates": mdates, "go": go, "px": px,
-            "df": df, "site_performance_df": site_perf_df, "utm_performance_df": utm_perf_df,
-            "ordered_stages": ordered_stages, "ts_col_map": ts_col_map, "weights": weights
-        }
-        
-        with st.spinner(f"Executing analysis..."):
             try:
-                full_coder_prompt = coder_prompt_template + f"\n\nNow, generate a Thought and Code block for this user request:\n{user_prompt}"
+                coder_prompt = get_coder_prompt(get_df_info(df), str(ts_col_map), site_perf_info, utm_perf_info)
+                full_coder_prompt = coder_prompt + f"\n\nNow, generate a Thought and Code block for this user request:\n{user_prompt}"
                 response = model.generate_content(full_coder_prompt)
                 
                 match = re.search(r"Thought:(.*?)```python(.*?)```", response.text, re.DOTALL)
@@ -201,58 +131,63 @@ if st.session_state.agent_run and st.session_state.agent_run["running"]:
                     thought = match.group(1).strip()
                     code_response = match.group(2).strip()
                 else:
-                    thought = "The AI did not provide a thought process."
+                    thought = "The AI did not provide a thought process. It may be a simple request."
                     code_response = response.text.strip().replace("```python", "").replace("```", "").strip()
 
-                with st.chat_message("assistant"):
-                    with st.expander("View AI's Thought Process and Code", expanded=True):
-                        st.markdown("**Thought Process:**")
-                        st.info(thought)
-                        st.markdown("**Generated Code:**")
-                        st.code(code_response, language="python")
+            except Exception as e:
+                st.error(f"An error occurred while generating code: {e}")
+                st.stop()
+        
+        with st.expander("View AI's Thought Process and Code", expanded=True):
+            st.markdown("**Thought Process:**")
+            st.info(thought)
+            st.markdown("**Generated Code:**")
+            st.code(code_response, language="python")
 
-                with st.chat_message("assistant"):
-                    st.markdown("**Execution Result:**")
-                    result_display_area = st.container()
-                    output_buffer = StringIO()
-                    sys.stdout = output_buffer
-                    
-                    with result_display_area:
-                        exec(code_response, execution_globals)
-                    
-                    sys.stdout = sys.__stdout__
-                    result_output_str = output_buffer.getvalue()
+        with st.spinner("Executing code..."):
+            st.markdown("**Execution Result:**")
+            result_display_area = st.container()
+            result_output_str = ""
+            try:
+                execution_globals = {
+                    "__builtins__": __builtins__, "st": st, "pd": pd, "np": np, "plt": plt, "alt": alt, "mdates": mdates, "go": go, "px": px,
+                    "df": df, "site_performance_df": site_perf_df, "utm_performance_df": utm_perf_df,
+                    "ordered_stages": ordered_stages, "ts_col_map": ts_col_map, "weights": weights
+                }
+                output_buffer = StringIO()
+                sys.stdout = output_buffer
+                with result_display_area:
+                    exec(code_response, execution_globals)
+                sys.stdout = sys.__stdout__
+                result_output_str = output_buffer.getvalue()
 
-                    if result_output_str:
-                        st.text(result_output_str)
+                if result_output_str:
+                    st.text(result_output_str)
 
             except Exception:
                 error_traceback = traceback.format_exc()
                 st.error("An error occurred during code execution:")
                 st.code(error_traceback, language="bash")
                 st.stop()
+
+        with st.spinner("Synthesizing final summary..."):
+            synthesis_context_parts = [
+                "**User's Question:**", user_prompt, "\n\n",
+                "**AI's Thought Process:**", thought, "\n\n",
+                "**Executed Code:**", f"```python\n{code_response}\n```\n\n",
+                "**Raw Result:**", result_output_str if result_output_str else "A plot was successfully generated."
+            ]
+            synthesis_context = "".join(synthesis_context_parts)
+            
+            synthesizer_prompt = get_synthesizer_prompt()
+            full_synthesizer_prompt = f"{synthesizer_prompt}\n\n--- ANALYSIS DETAILS ---\n{synthesis_context}\n\n--- EXECUTIVE SUMMARY ---"
+            
+            try:
+                summary_response = model.generate_content(full_synthesizer_prompt)
+                summary_text = summary_response.text
+            except Exception as e:
+                summary_text = f"Could not generate summary: {e}"
         
-        with st.chat_message("assistant"):
-            with st.spinner("Synthesizing final summary..."):
-                synthesis_context = (
-                    f"**User's Question:** {user_prompt}\n\n"
-                    f"**AI's Thought Process:** {thought}\n\n"
-                    f"**Executed Code:**\n```python\n{code_response}\n```\n\n"
-                    f"**Raw Result:**\n{result_output_str if result_output_str else 'A plot was generated.'}"
-                )
-                
-                synthesizer_prompt = get_synthesizer_prompt()
-                full_synthesizer_prompt = f"{synthesizer_prompt}\n\n--- ANALYSIS DETAILS ---\n{synthesis_context}\n\n--- EXECUTIVE SUMMARY ---"
-                
-                try:
-                    summary_response = model.generate_content(full_synthesizer_prompt)
-                    summary_text = summary_response.text
-                except Exception as e:
-                    summary_text = f"Could not generate final summary: {e}"
-
-            st.markdown("--- \n ## Executive Summary")
-            st.markdown(summary_text)
-
-        agent["summary"] = summary_text
+        st.markdown("--- \n ## Executive Summary")
+        st.markdown(summary_text)
         st.session_state.messages.append({"role": "assistant", "content": f"**Executive Summary:**\n{summary_text}"})
-        agent["running"] = False
