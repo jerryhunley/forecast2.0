@@ -64,25 +64,48 @@ Your Output:
 """
 
 @st.cache_data
-def get_coder_prompt():
-    return """You are an expert Python data analyst. Your goal is to write a Python code block to solve the CURRENT STEP of an analysis plan.
+def get_coder_prompt(_df_info, _ts_col_map_str):
+    # This prompt is built with safe string concatenation to avoid formatting errors.
+    prompt_part1 = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
 
---- CONTEXT ---
-You will be given the user's overall goal, a complete history of the code that has been executed so far (the 'scratchpad'), and the specific step you need to accomplish now.
-You MUST use the information from the scratchpad to inform your code. For example, if a previous step created a DataFrame called `performance_df`, you can use it.
-
---- AVAILABLE TOOLS & LIBRARIES ---
-- `df`: The master pandas DataFrame with all the raw data.
-- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`, `score_performance_groups()`.
-- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `matplotlib.dates as mdates`.
+--- AVAILABLE TOOLS ---
+You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
+1.  **`calculate_grouped_performance_metrics()`**: For performance reports/breakdowns.
+2.  **`calculate_avg_lag_generic()`**: For average time/lag between stages.
+3.  **`pandas`, `matplotlib`, `altair`, and `numpy`**: For custom analysis and visualizations.
 
 --- CODING RULES ---
-1.  **Analyze the Scratchpad:** Look at the previously executed code and its results to decide if you can reuse a variable or if you need to recalculate something from the base `df`.
-2.  **Output:** You MUST display the result of your step. Use `st.dataframe()` for DataFrames, `st.pyplot()` for plots, or `print()` for any other data type.
-3.  **Variable Naming:** When creating a new DataFrame, give it a descriptive name (e.g., `last_month_performance`, `top_sites_df`) so it can be used in later steps.
-4.  **DO NOT redefine functions.**
+1.  **Primary Date Column:** When you need to determine the "most recent month" or filter by a general time period, you MUST use the **`'Submitted On_DT'`** column. This column represents when the lead entered the campaign.
+2.  **DO NOT redefine functions.** They are pre-loaded.
+3.  **Clarification of Terms:** A "Site" is a location. A "Stage" is a step in the funnel (e.g., 'Sent To Site'). Leads transition between STAGES. If a user asks for a "site to site" trend, interpret this as the performance trend of the 'Sent To Site' STAGE over time.
+4.  **Time-Period Filtering:** For questions about specific events in a time period (e.g., "enrollments in May"), filter the DataFrame on the relevant **event timestamp column** (e.g., `ts_col_map['Enrolled']`), not 'Submission_Month'.
+5.  **Time-Series Analysis (Counting Events):** To count events "by week" or "by month", you must resample the relevant timestamp column.
+6.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.
+7.  **Final Output Rendering:**
+    *   **DataFrame:** Use `st.dataframe(result_df)`.
+    *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`. For monthly trends, format the x-axis with `mdates.DateFormatter('%Y-%m')`.
+    *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.
+    *   **Other (number, string, list):** Use `print()`.
+8.  **DEFENSIVE CODING:** Always check for division by zero and handle potential `NaN` or `inf` values gracefully.
 
-Your response MUST be ONLY the Python code block for the current step, starting with ```python and ending with ```."""
+--- CONTEXT VARIABLES ---
+- `df`: The main pandas DataFrame.
+- `np`: The NumPy library, imported as `np`.
+- `ordered_stages`: A list of the funnel stage names in order.
+- `ts_col_map`: A dictionary mapping stage names to timestamp columns. Here is the exact dictionary: """
+
+    prompt_part2 = f"`{_ts_col_map_str}`\n"
+    prompt_part3 = """- `weights`: A dictionary for scoring.
+
+--- DATAFRAME `df` SCHEMA ---
+"""
+    prompt_part4 = _df_info
+    prompt_part5 = """
+-----------------------------
+
+Your response MUST be ONLY the Python code block, starting with ```python and ends with ```."""
+
+    return prompt_part1 + prompt_part2 + prompt_part3 + prompt_part4 + prompt_part5
 
 @st.cache_data
 def get_synthesizer_prompt():
