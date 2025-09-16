@@ -56,27 +56,42 @@ def get_df_info(df):
 
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
-    # This is the final, most robust version of the prompt.
+    # This is the final, most robust version of the prompt, using a Chain-of-Thought example.
     prompt_parts = [
-        "You are an expert Python data analyst. Your goal is to write a Python code block to solve the user's request.",
+        "You are an expert Python data analyst. Your goal is to answer a user's question by generating a 'Thought' process and then the `Code` to execute it.",
         "\n--- RESPONSE FORMAT ---",
         "You MUST respond in two parts:",
-        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. You MUST explicitly state the full, exact column and variable names you will use.",
+        "1.  **Thought:** A step-by-step thought process explaining your plan. You MUST explicitly state the full, exact column and variable names you will use.",
         "2.  **Code:** A single, executable Python code block that implements your plan.",
-        "\n--- AVAILABLE VARIABLES & TOOLS ---",
-        "You have access to a specific set of pre-loaded DataFrames and variables. You are ONLY allowed to use the variables on this list. DO NOT invent new variable names.",
-        "1.  **`site_performance_df` (HIGHEST PRIORITY):** A pre-computed pandas DataFrame with all key performance metrics for every site. Use this for ANY question about site performance, rankings, or comparisons.",
-        "2.  **`utm_performance_df` (HIGH PRIORITY):** A pre-computed pandas DataFrame with performance metrics for each UTM source.",
-        "3.  **`df` (LOWEST PRIORITY):** The raw master DataFrame. Only use this for ad-hoc queries that cannot be answered by the pre-computed DataFrames.",
-        "4.  **`ts_col_map`**: A dictionary mapping stage names to timestamp column names for use with the raw `df`.",
-        "5.  **Libraries:** `pandas as pd`, `numpy as np`, `streamlit as st`, etc.",
-        "\n--- CRITICAL CODING RULES ---",
-        "- **The Golden Rule:** Analysis of a specific event (e.g., 'enrollments') MUST be based on the timestamp of THAT event.",
-        "- **Primary Date Column:** For general date filtering on the raw `df`, use `'Submitted On_DT'`.",
-        "- **Time-Series Resampling:** To count events 'by week' or 'by month', you MUST use `pd.Grouper` with the specific event timestamp column as the `key`.",
-        "- **Final Output:** You MUST display your result using `st.dataframe()`, `st.pyplot()`, etc.",
-        "- **DEFENSIVE CODING:** Always check for division by zero.",
-        "\n--- PRE-COMPUTED DATAFRAME SCHEMAS ---",
+        
+        "\n--- COMPLETE EXAMPLE OF A COMPLEX REQUEST ---",
+        "User Request: \"Show me in a line graph the enrollment trend for each site in the study by week\"",
+        "Thought:",
+        "1.  The user wants a weekly trend of 'enrollments' for each 'site'.",
+        "2.  I have two main tools: the pre-computed `site_performance_df` and the raw `df`.",
+        "3.  I will first check the schema of `site_performance_df`. It contains total 'Enrollment Count' per site, but it does NOT have weekly data. Therefore, it is not suitable for this request.",
+        "4.  I must fall back to using the raw `df` to get the necessary weekly granularity.",
+        "5.  The Golden Rule states that analysis of 'enrollments' MUST use the enrollment timestamp. I will use the `ts_col_map` to find the correct column name, which is `'TS_Enrolled'`.",
+        "6.  My plan is to group the raw `df` by 'Site' and then use `pd.Grouper` on the `'TS_Enrolled'` column with a weekly frequency (`freq='W'`) to get the counts.",
+        "7.  Finally, I will use `plotly.express` to create a line chart of the results, with each site as a different color.",
+        "```python",
+        "enrollment_col = ts_col_map.get('Enrolled')",
+        "if enrollment_col and enrollment_col in df.columns:",
+        "    weekly_enrollments = df.dropna(subset=[enrollment_col]).copy()",
+        "    weekly_enrollments_by_site = weekly_enrollments.groupby(['Site', pd.Grouper(key=enrollment_col, freq='W')]).size().reset_index(name='Enrollment Count')",
+        "    fig = px.line(weekly_enrollments_by_site, x=enrollment_col, y='Enrollment Count', color='Site', title='Weekly Enrollment Trend by Site')",
+        "    st.plotly_chart(fig, use_container_width=True)",
+        "else:",
+        "    print('Enrollment data is not available.')",
+        "```",
+        
+        "\n--- AVAILABLE VARIABLES & DATAFRAMES ---",
+        "1.  `site_performance_df`: Pre-computed DataFrame with aggregate site metrics.",
+        "2.  `utm_performance_df`: Pre-computed DataFrame with aggregate UTM metrics.",
+        "3.  `df`: The raw master DataFrame.",
+        "4.  `ts_col_map`: Dictionary mapping stage names to timestamp columns.",
+        
+        "\n--- DATAFRAME SCHEMAS ---",
         f"**`site_performance_df` Schema:**\n{_site_perf_info}",
         f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
         "\n--- RAW `df` SCHEMA ---",
@@ -87,7 +102,8 @@ def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info)
 
 @st.cache_data
 def get_synthesizer_prompt():
-    return """You are an expert business analyst and senior strategist. Your goal is to provide a single, cohesive, and insightful executive summary based on a series of data analyses.
+    return """You are an expert business analyst and senior strategist for a clinical trial company.
+Your goal is to provide a single, cohesive, and insightful executive summary based on a series of data analyses.
 You will be given the user's original complex question, the AI's thought process, the Python code executed, and the raw data result from that code.
 - **Start with a bolded headline** that directly answers the user's core question.
 - **Weave the results into a narrative.**
@@ -119,10 +135,8 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
 
     with st.spinner("AI is forming a plan and writing code..."):
         try:
-            # --- THIS IS THE CORRECTED FUNCTION CALL ---
             coder_prompt = get_coder_prompt(get_df_info(df), str(ts_col_map), site_perf_info, utm_perf_info)
-            
-            full_coder_prompt = coder_prompt + f"\n\nUser Question: {user_prompt}"
+            full_coder_prompt = coder_prompt + f"\n\nNow, generate a Thought and Code block for this user request:\n{user_prompt}"
             response = model.generate_content(full_coder_prompt)
             
             match = re.search(r"Thought:(.*?)```python(.*?)```", response.text, re.DOTALL)
@@ -130,7 +144,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                 thought = match.group(1).strip()
                 code_response = match.group(2).strip()
             else:
-                thought = "No thought process was generated. Proceeding with code execution."
+                thought = "The AI did not provide a thought process. It may be a simple request."
                 code_response = response.text.strip().replace("```python", "").replace("```", "").strip()
 
         except Exception as e:
@@ -150,7 +164,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
             result_display_area = st.container()
             try:
                 execution_globals = {
-                    "__builtins__": __builtins__, "st": st, "pd": pd, "np": np, "plt": plt, "alt": alt, "mdates": mdates, "go": go,
+                    "__builtins__": __builtins__, "st": st, "pd": pd, "np": np, "plt": plt, "alt": alt, "mdates": mdates, "go": go, "px": px,
                     "df": df, "site_performance_df": site_perf_df, "utm_performance_df": utm_perf_df,
                     "ordered_stages": ordered_stages, "ts_col_map": ts_col_map, "weights": weights
                 }
