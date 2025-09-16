@@ -84,25 +84,34 @@ After reviewing, output a **final, corrected, and optimized numbered plan**. If 
 
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str):
-    return f"""You are an expert Python data analyst. Your goal is to write a Python code block to solve the CURRENT STEP of an analysis plan.
---- CONTEXT ---
-You have access to the user's overall goal and a scratchpad of code and results from previous steps. You MUST use this scratchpad to inform your code (e.g., reusing variables).
---- AVAILABLE TOOLS & LIBRARIES ---
-- `df`: The master pandas DataFrame with all the raw data.
-- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`.
-- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `plotly.graph_objects as go`.
---- CODING RULES ---
-1.  **Primary Date Column:** For general date filtering, use `'Submitted On_DT'`.
-2.  **Final Output:** You MUST display your result. Use `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, `st.plotly_chart()`, or `print()`.
-3.  **DEFENSIVE CODING:** Always check for division by zero and handle `NaN`/`inf` values using `np.nan` and `np.inf`.
---- CONTEXT VARIABLES ---
-- `df`: The main pandas DataFrame.
-- `np`: The NumPy library, imported as `np`.
-- `ts_col_map`: The dictionary mapping stage names to timestamp columns: `{_ts_col_map_str}`
---- DATAFRAME `df` SCHEMA ---
-{_df_info}
------------------------------
-Your response MUST be ONLY the Python code block for the current step, starting with ```python and ends with ```."""
+    prompt_parts = [
+        "You are an expert Python data analyst. Your goal is to write a Python code block to solve the CURRENT STEP of an analysis plan.",
+        "--- CONTEXT ---",
+        "You have access to the user's overall goal and a scratchpad of code and results from previous steps. You MUST use this scratchpad to inform your code (e.g., reusing variables).",
+        "--- AVAILABLE TOOLS & LIBRARIES ---",
+        "- `df`: The master pandas DataFrame with all the raw data.",
+        "- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`.",
+        "- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `plotly.graph_objects as go`.",
+        "--- CODING RULES ---",
+        "1.  **DataFrame Display:** The `df` DataFrame contains complex columns like 'Parsed_Lead_Stage_History' that cannot be displayed directly. Before using `st.dataframe(some_df)`, you MUST select only the columns relevant to the user's request OR explicitly drop the 'Parsed_' columns. For example: `st.dataframe(some_df.drop(columns=['Parsed_Lead_Stage_History', 'Parsed_Lead_Status_History']))`.",
+        "2.  **Primary Date Column:** For general date filtering (e.g., \"last month\"), use the `'Submitted On_DT'` column.",
+        "3.  **DO NOT redefine functions.** They are pre-loaded.",
+        "4.  **Clarification of Terms:** A \"Site\" is a location. A \"Stage\" is a step in the funnel (e.g., 'Sent To Site'). Leads transition between STAGES. If a user asks for a \"site to site\" trend, interpret this as the performance trend of the 'Sent To Site' STAGE over time.",
+        "5.  **Time-Period Filtering:** For questions about specific events in a time period (e.g., \"enrollments in May\"), filter the DataFrame on the relevant **event timestamp column** (e.g., `ts_col_map['Enrolled']`), not 'Submission_Month'.",
+        "6.  **Time-Series Analysis (Counting Events):** To count events \"by week\" or \"by month\", you must resample the relevant timestamp column.",
+        "7.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.",
+        "8.  **Final Output Rendering:** Use `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, `st.plotly_chart()`, or `print()`.",
+        "9.  **DEFENSIVE CODING:** Always check for division by zero and handle `NaN`/`inf` values using `np.nan` and `np.inf`.",
+        "\n--- CONTEXT VARIABLES ---",
+        "- `df`: The main pandas DataFrame.",
+        "- `np`: The NumPy library, imported as `np`.",
+        f"- `ts_col_map`: The dictionary mapping stage names to timestamp columns: `{_ts_col_map_str}`",
+        "--- DATAFRAME `df` SCHEMA ---",
+        _df_info,
+        "-----------------------------",
+        "Your response MUST be ONLY the Python code block for the current step, starting with ```python and ends with ```."
+    ]
+    return "\n".join(prompt_parts)
 
 @st.cache_data
 def get_synthesizer_prompt():
