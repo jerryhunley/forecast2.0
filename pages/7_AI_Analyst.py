@@ -75,6 +75,8 @@ def get_critique_prompt():
     return """You are a senior data science manager. A junior analyst has proposed the following plan. Your job is to find flaws and improve it.
 Review the plan for misinterpretations of business logic, logical errors, or inefficiency.
 
+**CRITICAL RULE:** The most important error to check for is misinterpreting the user's request. Ensure the plan uses the EXACT terms and metrics the user asked for. For example, if the user asked for "appointments", the plan MUST be about appointments and not another stage like "Sent to Site".
+
 **Business Rules for Correction:**
 - The primary date for determining "last month" or "recent" activity is `'Submitted On_DT'`.
 - A "site to site trend" is ambiguous. You MUST correct the plan to interpret this as a request for the performance trend of the **'Sent To Site' STAGE** over time.
@@ -83,33 +85,26 @@ After reviewing, output a **final, corrected, and optimized numbered plan**. If 
 """
 
 @st.cache_data
-def get_coder_prompt(_df_info, _ts_col_map_str):
-    # This prompt is the final, most robust version.
-    prompt_parts = [
-        "You are an expert Python data analyst. Your goal is to write a Python code block to solve the CURRENT STEP of an analysis plan.",
-        "\n--- THE GOLDEN RULE OF ANALYSIS ---",
-        "When a user asks to analyze a specific event or stage (e.g., 'enrollments', 'Sent To Site', 'ICF rate'), your analysis MUST be based on the timestamp of THAT SPECIFIC EVENT. For example, 'weekly enrollments' means you must count enrollments based on the week they occurred according to the `'TS_Enrolled'` column, NOT the week their lead was submitted.",
-        "\n--- AVAILABLE TOOLS & LIBRARIES ---",
-        "- `df`: The master pandas DataFrame.",
-        "- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`.",
-        "- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `plotly.graph_objects as go`.",
-        "\n--- CRITICAL CODING RULES ---",
-        "1.  **Primary Date Column:** Only use the `'Submitted On_DT'` column for general filtering when no specific event is mentioned (e.g., 'show me all leads from last month').",
-        "2.  **DataFrame Display:** The `df` contains complex 'Parsed_' columns. Before using `st.dataframe()`, you MUST drop these columns.",
-        "3.  **Time-Series Resampling:** To count events 'by week' or 'by month', you MUST use `pd.Grouper`. The key MUST be the specific event timestamp column. Correct: `df.groupby(pd.Grouper(key=ts_col_map['Enrolled'], freq='W')).size()`.",
-        "4.  **Rate Trends:** To calculate a rate trend over time, calculate the numerator and denominator series separately using the correct `pd.Grouper` pattern, then combine and divide.",
-        "5.  **Final Output Rendering:** Use `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, `st.plotly_chart()`, or `print()`.",
-        "6.  **DEFENSIVE CODING:** Always check for division by zero and handle `NaN`/`inf` values using `np.nan` and `np.inf`.",
-        "\n--- CONTEXT VARIABLES ---",
-        "- `df`: The main pandas DataFrame.",
-        "- `np`: The NumPy library, imported as `np`.",
-        f"- `ts_col_map`: A dictionary mapping stage names to timestamp columns: `{_ts_col_map_str}`",
-        "--- DATAFRAME `df` SCHEMA ---",
-        _df_info,
-        "-----------------------------",
-        "Your response MUST be ONLY the Python code block for the current step, starting with ```python and ends with ```."
-    ]
-    return "\n".join(prompt_parts)
+def get_planner_prompt():
+    return """You are a project manager and expert data analyst. A user will ask a complex business question.
+Your first and ONLY task is to break this question down into a series of simple, logical, numbered steps.
+
+**CRITICAL RULE:** You MUST be extremely literal. If the user asks for "appointments", your plan must be about appointments. Do not substitute terms. For example, if the user asks about "appointments", DO NOT create a plan about "Sent to Site".
+
+**Business Rules for Clarification:**
+- The primary date for determining "last month" or "recent" activity is `'Submitted On_DT'`.
+- A "site to site trend" is ambiguous. You MUST interpret this as a request for the performance trend of the **'Sent To Site' STAGE** over time.
+
+**Example:**
+User Question: "Explain to me the performance from the last month of the campaign, what sites are highest performing in terms of enrollments, how many enrollments we generated, what is the trend in sent to site?"
+
+Your Output:
+1.  Determine the start and end dates for the most recent full calendar month in the data.
+2.  Calculate the total number of enrollments that occurred within that month.
+3.  Calculate a performance summary for all sites using only the data from that month.
+4.  From the summary in step 3, identify and display the top 3 sites with the highest 'Enrollment Count'.
+5.  Generate a line chart showing the weekly trend of the 'Sent to Site' rate over the past 3 months to provide broader context on recent performance.
+"""
 
 @st.cache_data
 def get_synthesizer_prompt():
