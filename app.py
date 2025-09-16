@@ -72,7 +72,8 @@ with st.sidebar:
 
     st.divider()
 
-    with st.expander("⚙️ Global Assumptions & Weights"):
+    # --- FIX: Removed emojis from expander labels for better compatibility ---
+    with st.expander("Global Assumptions & Weights"):
         st.subheader("Historical Ad Spend")
         edited_df = st.data_editor(
             st.session_state.historical_spend_df,
@@ -118,7 +119,7 @@ with st.sidebar:
         st.session_state.weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
 
 
-    with st.expander("📈 Projection & AI Assumptions"):
+    with st.expander("Projection & AI Assumptions"):
         st.subheader("General Settings")
         st.session_state.proj_horizon = st.number_input("Projection Horizon (Months)", 1, 48, 12)
         st.session_state.proj_goal_icf = st.number_input("Goal ICFs (for 'Projections' Page)", 1, 10000, 100)
