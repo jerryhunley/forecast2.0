@@ -1,0 +1,14 @@
+/* style.css */
+
+/* Target containers with a border */
+[data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px; /* This creates the rounded corners */
+    padding: 1.5em;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Optional: a subtle shadow */
+}
+
+/* Style the headers inside the cards */
+[data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] h3 {
+    margin-top: -0.75em;
+}
