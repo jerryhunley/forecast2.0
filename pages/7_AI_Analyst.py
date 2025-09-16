@@ -23,7 +23,7 @@ st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
 st.title("🤖 Strategic AI Analyst")
 st.info("""
-This advanced AI Analyst now reasons like a human analyst. It forms a plan, executes it, gathers additional business context, and then synthesizes all the information to provide deep, actionable insights.
+This advanced AI Analyst uses a **Plan-Critique-Execute** model. It forms an initial plan, has another AI review and correct that plan for logical flaws, and then executes the final, approved plan to provide a robust analysis.
 """)
 
 # --- Page Guard ---
@@ -84,34 +84,25 @@ After reviewing, output a **final, corrected, and optimized numbered plan**. If 
 
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str):
-    prompt_parts = [
-        "You are an expert Python data analyst. Your goal is to write a Python code block to solve the CURRENT STEP of an analysis plan.",
-        "--- CONTEXT ---",
-        "You have access to the user's overall goal and a scratchpad of code and results from previous steps. You MUST use this scratchpad to inform your code (e.g., reusing variables).",
-        "--- AVAILABLE TOOLS & LIBRARIES ---",
-        "- `df`: The master pandas DataFrame with all the raw data.",
-        "- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`.",
-        "- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `plotly.graph_objects as go`.",
-        "--- CODING RULES ---",
-        "1.  **DataFrame Display:** The `df` DataFrame contains complex columns like 'Parsed_Lead_Stage_History' that cannot be displayed directly. Before using `st.dataframe(some_df)`, you MUST select only the columns relevant to the user's request OR explicitly drop the 'Parsed_' columns. For example: `st.dataframe(some_df.drop(columns=['Parsed_Lead_Stage_History', 'Parsed_Lead_Status_History']))`.",
-        "2.  **Primary Date Column:** For general date filtering (e.g., \"last month\"), use the `'Submitted On_DT'` column.",
-        "3.  **DO NOT redefine functions.** They are pre-loaded.",
-        "4.  **Clarification of Terms:** A \"Site\" is a location. A \"Stage\" is a step in the funnel (e.g., 'Sent To Site'). Leads transition between STAGES. If a user asks for a \"site to site\" trend, interpret this as the performance trend of the 'Sent To Site' STAGE over time.",
-        "5.  **Time-Period Filtering:** For questions about specific events in a time period (e.g., \"enrollments in May\"), filter the DataFrame on the relevant **event timestamp column** (e.g., `ts_col_map['Enrolled']`), not 'Submission_Month'.",
-        "6.  **Time-Series Analysis (Counting Events):** To count events \"by week\" or \"by month\", you must resample the relevant timestamp column.",
-        "7.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.",
-        "8.  **Final Output Rendering:** Use `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, `st.plotly_chart()`, or `print()`.",
-        "9.  **DEFENSIVE CODING:** Always check for division by zero and handle `NaN`/`inf` values using `np.nan` and `np.inf`.",
-        "\n--- CONTEXT VARIABLES ---",
-        "- `df`: The main pandas DataFrame.",
-        "- `np`: The NumPy library, imported as `np`.",
-        f"- `ts_col_map`: The dictionary mapping stage names to timestamp columns: `{_ts_col_map_str}`",
-        "--- DATAFRAME `df` SCHEMA ---",
-        _df_info,
-        "-----------------------------",
-        "Your response MUST be ONLY the Python code block for the current step, starting with ```python and ends with ```."
-    ]
-    return "\n".join(prompt_parts)
+    return f"""You are an expert Python data analyst. Your goal is to write a Python code block to solve the CURRENT STEP of an analysis plan.
+--- CONTEXT ---
+You have access to the user's overall goal and a scratchpad of code and results from previous steps. You MUST use this scratchpad to inform your code (e.g., reusing variables).
+--- AVAILABLE TOOLS & LIBRARIES ---
+- `df`: The master pandas DataFrame.
+- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`.
+- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `plotly.graph_objects as go`.
+--- CODING RULES ---
+1.  **Primary Date Column:** For general date filtering, use `'Submitted On_DT'`.
+2.  **Final Output:** You MUST display your result. Use `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, `st.plotly_chart()`, or `print()`.
+3.  **DEFENSIVE CODING:** Always check for division by zero and handle `NaN`/`inf` values using `np.nan` and `np.inf`.
+--- CONTEXT VARIABLES ---
+- `df`: The main pandas DataFrame.
+- `np`: The NumPy library, imported as `np`.
+- `ts_col_map`: The dictionary mapping stage names to timestamp columns: `{_ts_col_map_str}`
+--- DATAFRAME `df` SCHEMA ---
+{_df_info}
+-----------------------------
+Your response MUST be ONLY the Python code block for the current step, starting with ```python and ends with ```."""
 
 @st.cache_data
 def get_synthesizer_prompt():
@@ -132,22 +123,11 @@ Synthesize all of this information into a high-level summary.
 - **Conclude with a clear recommendation** or key takeaway.
 """
 
-@st.cache_data
-def get_df_info(df):
-    buffer = StringIO()
-    df.info(buf=buffer)
-    return buffer.getvalue()
-
-# --- Main Chat Logic ---
+# Initialize session state variables
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "analysis_plan" not in st.session_state:
-    st.session_state.analysis_plan = None
-if "final_summary" not in st.session_state:
-    st.session_state.final_summary = None
-if "scratchpad" not in st.session_state:
-    st.session_state.scratchpad = ""
-
+if "agent_run" not in st.session_state:
+    st.session_state.agent_run = None
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -156,46 +136,49 @@ for message in st.session_state.messages:
 if user_prompt := st.chat_input("Ask a complex question about your data..."):
     # Start a new analysis run
     st.session_state.messages = [{"role": "user", "content": user_prompt}]
-    st.session_state.analysis_plan = None
-    st.session_state.final_summary = None
-    st.session_state.scratchpad = ""
+    st.session_state.agent_run = {
+        "plan": None,
+        "scratchpad": "",
+        "summary": None,
+        "step_index": 0
+    }
     st.rerun()
 
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    user_prompt = st.session_state.messages[-1]["content"]
-    
-    # AGENTIC WORKFLOW
-    if not st.session_state.analysis_plan:
+if st.session_state.agent_run:
+    # --- AGENTIC WORKFLOW ---
+    agent = st.session_state.agent_run
+    user_prompt = st.session_state.messages[0]["content"]
+
+    # Step 1 & 2: Plan and Critique
+    if not agent["plan"]:
         with st.chat_message("assistant"):
-            with st.spinner("Step 1/4: Decomposing question and forming a plan..."):
+            with st.spinner("Step 1/3: Decomposing question and forming a plan..."):
                 try:
-                    planner_prompt = get_planner_prompt()
-                    full_planner_prompt = planner_prompt + f"\n\nUser Question: {user_prompt}"
-                    plan_response = model.generate_content(full_planner_prompt)
+                    planner_prompt = get_planner_prompt() + f"\n\nUser Question: {user_prompt}"
+                    plan_response = model.generate_content(planner_prompt)
                     initial_plan = plan_response.text
                 except Exception as e:
                     st.error(f"An error occurred while creating the initial plan: {e}")
                     st.stop()
             
-            with st.spinner("Step 2/4: Reviewing and refining the plan for errors..."):
+            with st.spinner("Step 2/3: Reviewing and refining the plan..."):
                 try:
-                    critique_prompt = get_critique_prompt()
-                    full_critique_prompt = critique_prompt + f"\n\nUser Question: {user_prompt}\n\nProposed Plan:\n{initial_plan}"
-                    critique_response = model.generate_content(full_critique_prompt)
+                    critique_prompt = get_critique_prompt() + f"\n\nUser Question: {user_prompt}\n\nProposed Plan:\n{initial_plan}"
+                    critique_response = model.generate_content(critique_prompt)
                     final_plan_text = critique_response.text
-                    st.session_state.analysis_plan = final_plan_text
+                    agent["plan"] = final_plan_text
                 except Exception as e:
                     st.error(f"An error occurred while refining the plan: {e}")
                     st.stop()
         st.rerun()
 
-    if st.session_state.get("analysis_plan") and not st.session_state.get("final_summary"):
-        final_plan_text = st.session_state.analysis_plan
-        analysis_steps = re.findall(r'^\s*\d+\.\s*(.*)', final_plan_text, re.MULTILINE)
+    # Step 3: Execution Loop
+    if agent["plan"] and not agent["summary"]:
+        analysis_steps = re.findall(r'^\s*\d+\.\s*(.*)', agent["plan"], re.MULTILINE)
         
         with st.chat_message("assistant"):
             with st.expander("View AI's Analysis Plan", expanded=True):
-                st.markdown(final_plan_text)
+                st.markdown(agent["plan"])
                 
         coder_prompt_template = get_coder_prompt(get_df_info(df), str(ts_col_map))
         execution_globals = {
@@ -208,31 +191,29 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
 
         for i, step in enumerate(analysis_steps):
             with st.chat_message("assistant"):
-                with st.spinner(f"Step 3 ({i+1}/{len(analysis_steps)}): Executing '{step}'..."):
+                st.markdown(f"**Step {i+1}: {step}**")
+                with st.spinner(f"Executing..."):
                     try:
-                        full_coder_prompt = coder_prompt_template + f"\n\n--- SCRATCHPAD (PREVIOUS STEPS) ---\n{st.session_state.scratchpad}\n\n--- CURRENT STEP ---\nYour task is to write Python code for this step: \"{step}\""
+                        full_coder_prompt = coder_prompt_template + f"\n\n--- SCRATCHPAD (PREVIOUS STEPS) ---\n{agent['scratchpad']}\n\n--- CURRENT STEP ---\nYour task is to write Python code for this step: \"{step}\""
                         response = model.generate_content(full_coder_prompt)
                         code_response = response.text.strip().replace("```python", "").replace("```", "").strip()
                         
-                        st.markdown(f"**Step {i+1}: {step}**")
                         result_display_area = st.container()
-                        
                         output_buffer = StringIO()
-                        original_stdout = sys.stdout
                         sys.stdout = output_buffer
                         
                         with result_display_area:
                             exec(code_response, execution_globals)
                         
-                        sys.stdout = original_stdout
+                        sys.stdout = sys.__stdout__
                         result_output_str = output_buffer.getvalue()
 
                         if result_output_str:
                             st.text(result_output_str)
 
-                        st.session_state.scratchpad += f"\n\n# Step {i+1}: {step}\n"
-                        st.session_state.scratchpad += f"```python\n{code_response}\n```\n"
-                        st.session_state.scratchpad += f"# Result:\n# {result_output_str if result_output_str else 'A plot was generated.'}"
+                        agent["scratchpad"] += f"\n\n# Step {i+1}: {step}\n"
+                        agent["scratchpad"] += f"```python\n{code_response}\n```\n"
+                        agent["scratchpad"] += f"# Result:\n# {result_output_str if result_output_str else 'A plot was generated.'}"
 
                     except Exception:
                         error_traceback = traceback.format_exc()
@@ -240,13 +221,14 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                         st.code(error_traceback, language="bash")
                         st.stop()
         
+        # Step 4: Synthesis
         with st.chat_message("assistant"):
             with st.spinner("Step 4/4: Synthesizing results into an executive summary..."):
                 site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
                 utm_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'UTM Source', 'Unclassified Source')
 
                 business_context_appendix = (
-                    "\n\n--- BUSINESS CONTEXT APPENDIX ---\n\n"
+                    "\n\n--- BUSINESS CONTEXT APPENDIX ---\n"
                     "**Overall Site Performance Dataframe:**\n"
                     f"```\n{site_perf_df.to_string()}\n```\n\n"
                     "**Overall UTM Source Performance Dataframe:**\n"
@@ -254,11 +236,10 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                 )
                 
                 synthesizer_prompt = get_synthesizer_prompt()
-                
                 full_synthesizer_prompt = (
                     synthesizer_prompt +
                     "\n\n--- ORIGINAL USER QUESTION ---\n" + user_prompt +
-                    "\n\n--- FULL ANALYSIS REPORT (PLAN AND RESULTS) ---\n" + st.session_state.scratchpad +
+                    "\n\n--- FULL ANALYSIS REPORT (PLAN AND RESULTS) ---\n" + agent["scratchpad"] +
                     business_context_appendix +
                     "\n\n--- YOUR EXECUTIVE SUMMARY ---"
                 )
@@ -272,6 +253,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
             st.markdown("--- \n ## Executive Summary")
             st.markdown(summary_text)
 
-        st.session_state.final_summary = summary_text
+        agent["summary"] = summary_text
         st.session_state.messages.append({"role": "assistant", "content": f"**Executive Summary:**\n{summary_text}"})
-        st.rerun()
+        # Reset the agent run so the user can ask a new question
+        st.session_state.agent_run = None
