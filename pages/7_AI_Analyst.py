@@ -23,7 +23,7 @@ st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
 st.title("🤖 Strategic AI Analyst")
 st.info("""
-This AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
+This advanced AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
 """)
 
 # --- Page Guard ---
@@ -47,10 +47,16 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# --- System Prompts ---
+# --- ALL HELPER FUNCTIONS ARE DEFINED HERE, BEFORE THEY ARE CALLED ---
+
 @st.cache_data
-def get_reasoner_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
-    # This is the master prompt for our most advanced agent.
+def get_df_info(df):
+    buffer = StringIO()
+    df.info(buf=buffer)
+    return buffer.getvalue()
+
+@st.cache_data
+def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
     prompt_parts = [
         "You are a world-class Python data analyst. Your goal is to answer a user's question by first creating a 'Thought' process and then writing the `Code` to execute it.",
         "\n--- RESPONSE FORMAT ---",
@@ -67,8 +73,8 @@ def get_reasoner_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_in
         "- Your primary goal is to use the pre-computed DataFrames whenever possible.",
         "\n--- CRITICAL CODING RULES ---",
         "- **Primary Date Column:** For general date filtering on the raw `df`, use `'Submitted On_DT'`.",
-        "- **Final Output:** Display your result with `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, or `print()`.",
-        "- **DEFENSIVE CODING:** Handle division by zero and `NaN` values using `np.nan` and `np.inf`.",
+        "- **Final Output:** Display your result with `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, `st.plotly_chart()`, or `print()`.",
+        "- **DEFENSIVE CODING:** Handle division by zero and `NaN`/`inf` values using `np.nan` and `np.inf`.",
         "\n--- PRE-COMPUTED DATAFRAME SCHEMAS ---",
         f"**`site_performance_df` Schema:**\n{_site_perf_info}",
         f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
@@ -91,12 +97,6 @@ You will be given the user's original complex question, the AI's thought process
 - **Conclude with a clear recommendation** or key takeaway.
 """
 
-@st.cache_data
-def get_df_info(df):
-    buffer = StringIO()
-    df.info(buf=buffer)
-    return buffer.getvalue()
-
 # --- Main Chat Logic ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -112,7 +112,6 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
 if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
     user_prompt = st.session_state.messages[-1]["content"]
 
-    # Pre-compute the trusted reports to give the AI its "foundation of knowledge"
     with st.spinner("Pre-calculating standard business reports..."):
         site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
         utm_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'UTM Source', 'Unclassified Source')
@@ -122,16 +121,16 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
 
     with st.spinner("AI is forming a plan and writing code..."):
         try:
+            # THIS IS WHERE THE NAMEERROR WAS. THE FUNCTION CALL IS NOW AFTER THE DEFINITION.
             coder_prompt = get_coder_prompt(get_df_info(df), str(ts_col_map), site_perf_info, utm_perf_info)
             full_coder_prompt = coder_prompt + f"\n\nUser Question: {user_prompt}"
             response = model.generate_content(full_coder_prompt)
             
-            # Use regex to safely split the Thought and Code parts
             match = re.search(r"Thought:(.*?)```python(.*?)```", response.text, re.DOTALL)
             if match:
                 thought = match.group(1).strip()
                 code_response = match.group(2).strip()
-            else: # Fallback for simple requests that might only return code
+            else:
                 thought = "No thought process was generated. Proceeding with code execution."
                 code_response = response.text.strip().replace("```python", "").replace("```", "").strip()
 
