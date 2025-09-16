@@ -46,7 +46,6 @@ except Exception as e:
     st.stop()
 
 # --- System Prompts for the Advanced Agent ---
-
 @st.cache_data
 def get_planner_prompt():
     return """You are a project manager and expert data analyst. A user will ask a complex business question.
@@ -65,55 +64,46 @@ Your Output:
 
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str):
-    # This prompt is built with safe string concatenation to avoid formatting errors.
-    prompt_part1 = """You are a world-class Python data analyst. Your goal is to answer the user's question about recruitment data by generating a single, executable Python code block.
-
---- AVAILABLE TOOLS ---
-You MUST use the exact function signatures provided below. Do not add or assume any extra arguments.
-1.  **`calculate_grouped_performance_metrics()`**: For performance reports/breakdowns.
-2.  **`calculate_avg_lag_generic()`**: For average time/lag between stages.
-3.  **`pandas`, `matplotlib`, `altair`, and `numpy`**: For custom analysis and visualizations.
-
---- CODING RULES ---
-1.  **Primary Date Column:** When you need to determine the "most recent month" or filter by a general time period, you MUST use the **`'Submitted On_DT'`** column. This column represents when the lead entered the campaign.
-2.  **DO NOT redefine functions.** They are pre-loaded.
-3.  **Clarification of Terms:** A "Site" is a location. A "Stage" is a step in the funnel (e.g., 'Sent To Site'). Leads transition between STAGES. If a user asks for a "site to site" trend, interpret this as the performance trend of the 'Sent To Site' STAGE over time.
-4.  **Time-Period Filtering:** For questions about specific events in a time period (e.g., "enrollments in May"), filter the DataFrame on the relevant **event timestamp column** (e.g., `ts_col_map['Enrolled']`), not 'Submission_Month'.
-5.  **Time-Series Analysis (Counting Events):** To count events "by week" or "by month", you must resample the relevant timestamp column.
-6.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.
-7.  **Final Output Rendering:**
-    *   **DataFrame:** Use `st.dataframe(result_df)`.
-    *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`. For monthly trends, format the x-axis with `mdates.DateFormatter('%Y-%m')`.
-    *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.
-    *   **Other (number, string, list):** Use `print()`.
-8.  **DEFENSIVE CODING:** Always check for division by zero and handle potential `NaN` or `inf` values gracefully.
-
---- CONTEXT VARIABLES ---
-- `df`: The main pandas DataFrame.
-- `np`: The NumPy library, imported as `np`.
-- `ordered_stages`: A list of the funnel stage names in order.
-- `ts_col_map`: A dictionary mapping stage names to timestamp columns. Here is the exact dictionary: """
-
-    prompt_part2 = f"`{_ts_col_map_str}`\n"
-    prompt_part3 = """- `weights`: A dictionary for scoring.
-
---- DATAFRAME `df` SCHEMA ---
-"""
-    prompt_part4 = _df_info
-    prompt_part5 = """
------------------------------
-
-Your response MUST be ONLY the Python code block, starting with ```python and ends with ```."""
-
-    return prompt_part1 + prompt_part2 + prompt_part3 + prompt_part4 + prompt_part5
+    prompt_parts = [
+        "You are a world-class Python data analyst. Your goal is to answer a SINGLE, simple question by generating a single, executable Python code block.",
+        "\n--- CONTEXT ---",
+        "You will be given the user's overall goal, a complete history of the code that has been executed so far (the 'scratchpad'), and the specific step you need to accomplish now.",
+        "You MUST use the information from the scratchpad to inform your code. For example, if a previous step created a DataFrame called `performance_df`, you can use it.",
+        "\n--- AVAILABLE TOOLS & LIBRARIES ---",
+        "- `df`: The master pandas DataFrame with all the raw data.",
+        "- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`, `score_performance_groups()`.",
+        "- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `matplotlib.dates as mdates`.",
+        "\n--- CODING RULES ---",
+        "1.  **Primary Date Column:** When you need to determine the \"most recent month\" or filter by a general time period, you MUST use the **`'Submitted On_DT'`** column. This column represents when the lead entered the campaign.",
+        "2.  **DO NOT redefine functions.** They are pre-loaded.",
+        "3.  **Clarification of Terms:** A \"Site\" is a location. A \"Stage\" is a step in the funnel (e.g., 'Sent To Site'). Leads transition between STAGES. If a user asks for a \"site to site\" trend, interpret this as the performance trend of the 'Sent To Site' STAGE over time.",
+        "4.  **Time-Period Filtering:** For questions about specific events in a time period (e.g., \"enrollments in May\"), filter the DataFrame on the relevant **event timestamp column** (e.g., `ts_col_map['Enrolled']`), not 'Submission_Month'.",
+        "5.  **Time-Series Analysis (Counting Events):** To count events \"by week\" or \"by month\", you must resample the relevant timestamp column.",
+        "6.  **Time-Series Analysis (Rate Trends):** To calculate a rate trend over time, you must calculate the monthly totals for the numerator and the denominator separately, then combine them before dividing.",
+        "7.  **Final Output Rendering:**",
+        "    *   **DataFrame:** Use `st.dataframe(result_df)`.",
+        "    *   **Matplotlib plot:** End with `st.pyplot(plt.gcf())`. For monthly trends, format the x-axis with `mdates.DateFormatter('%Y-%m')`.",
+        "    *   **Altair chart:** End with `st.altair_chart(chart, use_container_width=True)`.",
+        "    *   **Other (number, string, list):** Use `print()`.",
+        "8.  **DEFENSIVE CODING:** Always check for division by zero and handle potential `NaN` or `inf` values gracefully.",
+        "\n--- CONTEXT VARIABLES ---",
+        "- `df`: The main pandas DataFrame.",
+        "- `np`: The NumPy library, imported as `np`.",
+        "- `ordered_stages`: A list of the funnel stage names in order.",
+        f"- `ts_col_map`: A dictionary mapping stage names to timestamp columns: `{_ts_col_map_str}`",
+        "- `weights`: A dictionary for scoring.",
+        "\n--- DATAFRAME `df` SCHEMA ---",
+        _df_info,
+        "-----------------------------\n",
+        "Your response MUST be ONLY the Python code block, starting with ```python and ends with ```."
+    ]
+    return "\n".join(prompt_parts)
 
 @st.cache_data
 def get_synthesizer_prompt():
     return """You are an expert business analyst and strategist for a clinical trial company.
 Your goal is to provide a single, cohesive, and insightful executive summary based on a series of data analyses.
-
 You will be given the user's original complex question and a complete report containing the step-by-step plan, the Python code executed for each step, and the raw data result from each step.
-
 Your task is to synthesize all of this information into a single, high-level summary.
 - **Start with a clear, bolded headline** that answers the user's core question.
 - **Do not just list the results.** Weave them together into a narrative.
@@ -121,6 +111,12 @@ Your task is to synthesize all of this information into a single, high-level sum
 - **Provide a concluding sentence** with a key takeaway or recommendation.
 - Keep your entire response to 3-5 sentences.
 """
+
+@st.cache_data
+def get_df_info(df):
+    buffer = StringIO()
+    df.info(buf=buffer)
+    return buffer.getvalue()
 
 # --- Main Chat Logic ---
 if "messages" not in st.session_state:
@@ -141,8 +137,9 @@ if user_prompt := st.chat_input("Ask a complex question about your data..."):
     # Step 1: DECOMPOSITION - Create a plan
     with st.spinner("Step 1/3: Decomposing question into a plan..."):
         try:
-            planner_prompt = get_planner_prompt() + f"\n\nUser Question: {user_prompt}"
-            plan_response = model.generate_content(planner_prompt)
+            planner_prompt = get_planner_prompt()
+            full_planner_prompt = planner_prompt + f"\n\nUser Question: {user_prompt}"
+            plan_response = model.generate_content(full_planner_prompt)
             plan_text = plan_response.text
             analysis_steps = re.findall(r'^\s*\d+\.\s*(.*)', plan_text, re.MULTILINE)
             if not analysis_steps: analysis_steps = [line.strip() for line in plan_text.split('\n') if line.strip() and re.match(r'^\s*\d+\.', line)]
@@ -155,7 +152,7 @@ if user_prompt := st.chat_input("Ask a complex question about your data..."):
         st.markdown("\n".join(f"{i+1}. {step}" for i, step in enumerate(analysis_steps)))
         
     # Step 2: EXECUTION - Loop through the plan
-    coder_prompt_template = get_coder_prompt()
+    coder_prompt_template = get_coder_prompt(get_df_info(df), str(ts_col_map))
     execution_globals = {
         "__builtins__": __builtins__, "st": st, "pd": pd, "np": np, "plt": plt, "alt": alt, "mdates": mdates,
         "df": df, "ordered_stages": ordered_stages, "ts_col_map": ts_col_map, "weights": weights,
