@@ -23,7 +23,7 @@ st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
 st.title("🤖 Strategic AI Analyst")
 st.info("""
-This advanced AI Analyst now reasons like a human analyst. It forms a plan, executes it, gathers additional business context, and then synthesizes all the information to provide deep, actionable insights.
+This advanced AI Analyst uses a **Plan-Critique-Execute** model. It forms an initial plan, has another AI review and correct that plan for logical flaws, and then executes the final, approved plan to provide a robust analysis.
 """)
 
 # --- Page Guard ---
@@ -48,12 +48,13 @@ except Exception as e:
     st.stop()
 
 # --- System Prompts for the Advanced Agent ---
+
 @st.cache_data
 def get_planner_prompt():
     return """You are a project manager and expert data analyst. A user will ask a complex business question.
-Your first and ONLY task is to break this question down into a series of simple, logical, numbered steps for a junior analyst to execute.
-Each step should be a clear, self-contained instruction that results in a single output (a number, a table, or a plot).
-The plan should build on itself. It should be efficient and directly answer the user's question.
+Your first and ONLY task is to break this question down into a series of simple, logical, numbered steps.
+
+**CRITICAL RULE:** You MUST be extremely literal. If the user asks for "appointments", your plan must be about appointments. Do not substitute terms. For example, if the user asks about "appointments", DO NOT create a plan about "Sent to Site".
 
 **Business Rules for Clarification:**
 - The primary date for determining "last month" or "recent" activity is `'Submitted On_DT'`.
@@ -85,32 +86,31 @@ After reviewing, output a **final, corrected, and optimized numbered plan**. If 
 """
 
 @st.cache_data
-def get_planner_prompt():
-    return """You are a project manager and expert data analyst. A user will ask a complex business question.
-Your first and ONLY task is to break this question down into a series of simple, logical, numbered steps.
-
-**CRITICAL RULE:** You MUST be extremely literal. If the user asks for "appointments", your plan must be about appointments. Do not substitute terms. For example, if the user asks about "appointments", DO NOT create a plan about "Sent to Site".
-
-**Business Rules for Clarification:**
-- The primary date for determining "last month" or "recent" activity is `'Submitted On_DT'`.
-- A "site to site trend" is ambiguous. You MUST interpret this as a request for the performance trend of the **'Sent To Site' STAGE** over time.
-
-**Example:**
-User Question: "Explain to me the performance from the last month of the campaign, what sites are highest performing in terms of enrollments, how many enrollments we generated, what is the trend in sent to site?"
-
-Your Output:
-1.  Determine the start and end dates for the most recent full calendar month in the data.
-2.  Calculate the total number of enrollments that occurred within that month.
-3.  Calculate a performance summary for all sites using only the data from that month.
-4.  From the summary in step 3, identify and display the top 3 sites with the highest 'Enrollment Count'.
-5.  Generate a line chart showing the weekly trend of the 'Sent to Site' rate over the past 3 months to provide broader context on recent performance.
-"""
+def get_coder_prompt(_df_info, _ts_col_map_str):
+    return f"""You are an expert Python data analyst. Your goal is to write a Python code block to solve the CURRENT STEP of an analysis plan.
+--- CONTEXT ---
+You have access to the user's overall goal and a scratchpad of code and results from previous steps. You MUST use this scratchpad to inform your code (e.g., reusing variables).
+--- AVAILABLE TOOLS & LIBRARIES ---
+- `df`: The master pandas DataFrame with all the raw data.
+- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`.
+- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `plotly.graph_objects as go`.
+--- CODING RULES ---
+1.  **Primary Date Column:** For general date filtering, use `'Submitted On_DT'`.
+2.  **Final Output:** You MUST display your result. Use `st.dataframe()`, `st.pyplot()`, `st.altair_chart()`, `st.plotly_chart()`, or `print()`.
+3.  **DEFENSIVE CODING:** Always check for division by zero and handle `NaN`/`inf` values using `np.nan` and `np.inf`.
+--- CONTEXT VARIABLES ---
+- `df`: The main pandas DataFrame.
+- `np`: The NumPy library, imported as `np`.
+- `ts_col_map`: The dictionary mapping stage names to timestamp columns: `{_ts_col_map_str}`
+--- DATAFRAME `df` SCHEMA ---
+{_df_info}
+-----------------------------
+Your response MUST be ONLY the Python code block for the current step, starting with ```python and ends with ```."""
 
 @st.cache_data
 def get_synthesizer_prompt():
     return """You are an expert business analyst and senior strategist for a clinical trial company.
 Your goal is to provide a single, cohesive, and insightful executive summary based on a series of data analyses.
-
 You will be given the user's original complex question and a complete report containing:
 1.  The step-by-step plan that was executed.
 2.  The Python code and its direct output for each step.
@@ -119,7 +119,7 @@ You will be given the user's original complex question and a complete report con
 **Your Task:**
 Synthesize all of this information into a high-level summary.
 - **Start with a bolded headline** that directly answers the user's core question.
-- **Do not just list the results. Weave them into a narrative.**
+- **Weave the results into a narrative.** Don't just list them.
 - **CRITICAL:** **Connect the dots between the different data points.** If the plan's results show a negative trend (e.g., a declining rate), you MUST look at the Business Context Appendix dataframes to **form a hypothesis about the cause**. For example, "The overall 'Sent to Site' rate is declining, which appears to be driven by a sharp drop in performance from Site X and the 'Facebook' ad channel."
 - **Analyze Downstream Impact:** Based on the data, predict the likely future consequences. For example, "This decline in 'Sent to Site' will likely lead to a drop in 'Appointments Scheduled' next month, putting our Q3 enrollment goal at risk."
 - **Conclude with a clear recommendation** or key takeaway.
@@ -134,13 +134,8 @@ def get_df_info(df):
 # --- Main Chat Logic ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "analysis_plan" not in st.session_state:
-    st.session_state.analysis_plan = None
-if "final_summary" not in st.session_state:
-    st.session_state.final_summary = None
-if "scratchpad" not in st.session_state:
-    st.session_state.scratchpad = ""
-
+if "agent_run" not in st.session_state:
+    st.session_state.agent_run = None
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -149,18 +144,21 @@ for message in st.session_state.messages:
 if user_prompt := st.chat_input("Ask a complex question about your data..."):
     # Start a new analysis run
     st.session_state.messages = [{"role": "user", "content": user_prompt}]
-    st.session_state.analysis_plan = None
-    st.session_state.final_summary = None
-    st.session_state.scratchpad = ""
+    st.session_state.agent_run = {
+        "plan": None,
+        "scratchpad": "",
+        "summary": None,
+    }
     st.rerun()
 
-if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-    user_prompt = st.session_state.messages[-1]["content"]
+if st.session_state.agent_run:
+    agent = st.session_state.agent_run
+    user_prompt = st.session_state.messages[0]["content"]
     
-    # AGENTIC WORKFLOW
-    if not st.session_state.analysis_plan:
+    # Step 1 & 2: Plan and Critique
+    if not agent["plan"]:
         with st.chat_message("assistant"):
-            with st.spinner("Step 1/4: Decomposing question and forming a plan..."):
+            with st.spinner("Step 1/3: Decomposing question and forming a plan..."):
                 try:
                     planner_prompt = get_planner_prompt()
                     full_planner_prompt = planner_prompt + f"\n\nUser Question: {user_prompt}"
@@ -170,25 +168,25 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                     st.error(f"An error occurred while creating the initial plan: {e}")
                     st.stop()
             
-            with st.spinner("Step 2/4: Reviewing and refining the plan for errors..."):
+            with st.spinner("Step 2/3: Reviewing and refining the plan for errors..."):
                 try:
                     critique_prompt = get_critique_prompt()
                     full_critique_prompt = critique_prompt + f"\n\nUser Question: {user_prompt}\n\nProposed Plan:\n{initial_plan}"
                     critique_response = model.generate_content(full_critique_prompt)
                     final_plan_text = critique_response.text
-                    st.session_state.analysis_plan = final_plan_text
+                    agent["plan"] = final_plan_text
                 except Exception as e:
                     st.error(f"An error occurred while refining the plan: {e}")
                     st.stop()
         st.rerun()
 
-    if st.session_state.get("analysis_plan") and not st.session_state.get("final_summary"):
-        final_plan_text = st.session_state.analysis_plan
-        analysis_steps = re.findall(r'^\s*\d+\.\s*(.*)', final_plan_text, re.MULTILINE)
+    # Step 3: Execution Loop
+    if agent["plan"] and not agent["summary"]:
+        analysis_steps = re.findall(r'^\s*\d+\.\s*(.*)', agent["plan"], re.MULTILINE)
         
         with st.chat_message("assistant"):
             with st.expander("View AI's Analysis Plan", expanded=True):
-                st.markdown(final_plan_text)
+                st.markdown(agent["plan"])
                 
         coder_prompt_template = get_coder_prompt(get_df_info(df), str(ts_col_map))
         execution_globals = {
@@ -203,7 +201,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
             with st.chat_message("assistant"):
                 with st.spinner(f"Step 3 ({i+1}/{len(analysis_steps)}): Executing '{step}'..."):
                     try:
-                        full_coder_prompt = coder_prompt_template + f"\n\n--- SCRATCHPAD (PREVIOUS STEPS) ---\n{st.session_state.scratchpad}\n\n--- CURRENT STEP ---\nYour task is to write Python code for this step: \"{step}\""
+                        full_coder_prompt = coder_prompt_template + f"\n\n--- SCRATCHPAD (PREVIOUS STEPS) ---\n{agent['scratchpad']}\n\n--- CURRENT STEP ---\nYour task is to write Python code for this step: \"{step}\""
                         response = model.generate_content(full_coder_prompt)
                         code_response = response.text.strip().replace("```python", "").replace("```", "").strip()
                         
@@ -223,9 +221,9 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                         if result_output_str:
                             st.text(result_output_str)
 
-                        st.session_state.scratchpad += f"\n\n# Step {i+1}: {step}\n"
-                        st.session_state.scratchpad += f"```python\n{code_response}\n```\n"
-                        st.session_state.scratchpad += f"# Result:\n# {result_output_str if result_output_str else 'A plot was generated.'}"
+                        agent["scratchpad"] += f"\n\n# Step {i+1}: {step}\n"
+                        agent["scratchpad"] += f"```python\n{code_response}\n```\n"
+                        agent["scratchpad"] += f"# Result:\n# {result_output_str if result_output_str else 'A plot was generated.'}"
 
                     except Exception:
                         error_traceback = traceback.format_exc()
@@ -233,6 +231,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                         st.code(error_traceback, language="bash")
                         st.stop()
         
+        # Step 4: Synthesis
         with st.chat_message("assistant"):
             with st.spinner("Step 4/4: Synthesizing results into an executive summary..."):
                 site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
@@ -251,7 +250,7 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
                 full_synthesizer_prompt = (
                     synthesizer_prompt +
                     "\n\n--- ORIGINAL USER QUESTION ---\n" + user_prompt +
-                    "\n\n--- FULL ANALYSIS REPORT (PLAN AND RESULTS) ---\n" + st.session_state.scratchpad +
+                    "\n\n--- FULL ANALYSIS REPORT (PLAN AND RESULTS) ---\n" + agent["scratchpad"] +
                     business_context_appendix +
                     "\n\n--- YOUR EXECUTIVE SUMMARY ---"
                 )
@@ -265,5 +264,8 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
             st.markdown("--- \n ## Executive Summary")
             st.markdown(summary_text)
 
-        st.session_state.final_summary = summary_text
+        agent["summary"] = summary_text
         st.session_state.messages.append({"role": "assistant", "content": f"**Executive Summary:**\n{summary_text}"})
+        # Reset the agent run so the user can ask a new question
+        st.session_state.agent_run = None
+        st.rerun()
