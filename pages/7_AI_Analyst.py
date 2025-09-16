@@ -51,36 +51,49 @@ except Exception as e:
 # --- System Prompts ---
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
-    # This prompt uses a strict Chain-of-Thought (CoT) and forces the AI to state its column choices.
+    # This is the final, most robust version of the prompt, using a perfect Chain-of-Thought example.
     prompt_parts = [
         "You are an expert Python data analyst. Your goal is to answer a user's question by generating a 'Thought' process and then the `Code` to execute it.",
         "\n--- RESPONSE FORMAT ---",
         "You MUST respond in two parts:",
-        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. **You MUST explicitly state the full, exact column names you will use.**",
+        "1.  **Thought:** A brief, step-by-step thought process explaining your plan. You MUST explicitly state the full, exact column and variable names you will use.",
         "2.  **Code:** A single, executable Python code block that implements your plan.",
-        "\n--- EXAMPLE ---",
-        "User Request: \"How many total enrollments were there?\"",
-        "Thought: The user wants the total number of enrollments. The Golden Rule says I must use the timestamp for this event. I will use the `ts_col_map` to find the correct column for 'Enrolled', which is `TS_Enrolled`. I will then count the non-null values in that specific column.",
+        
+        "\n--- COMPLETE EXAMPLE OF A COMPLEX REQUEST ---",
+        "User Request: \"Show me in a line graph the enrollment trend for each site in the study by week\"",
+        "Thought:",
+        "1.  The user wants a weekly trend of 'enrollments' for each 'site'.",
+        "2.  I need to use the raw `df` to get weekly granularity.",
+        "3.  The Golden Rule says I must use the enrollment timestamp. `ts_col_map` shows the column is `'TS_Enrolled'`.",
+        "4.  I will filter out rows where `'TS_Enrolled'` is null.",
+        "5.  I will then group by `'Site'` and `pd.Grouper` on the `'TS_Enrolled'` column with a weekly frequency (`freq='W'`) to get the counts.",
+        "6.  Finally, I will use `plotly.express` (as `px`) to create a line chart of the results.",
         "```python",
+        "import plotly.express as px",
         "enrollment_col = ts_col_map.get('Enrolled')",
-        "if enrollment_col:",
-        "    enrollment_count = df[enrollment_col].notna().sum()",
-        "    print(f'Total Enrollments: {enrollment_count}')",
+        "if enrollment_col and enrollment_col in df.columns:",
+        "    weekly_df = df.dropna(subset=[enrollment_col]).copy()",
+        "    weekly_by_site = weekly_df.groupby(['Site', pd.Grouper(key=enrollment_col, freq='W')]).size().reset_index(name='Enrollment Count')",
+        "    fig = px.line(weekly_by_site, x=enrollment_col, y='Enrollment Count', color='Site', title='Weekly Enrollment Trend by Site')",
+        "    st.plotly_chart(fig, use_container_width=True)",
         "else:",
-        "    print('Enrollment timestamp column not found.')",
+        "    print('Enrollment data is not available.')",
         "```",
-        "\n--- THE GOLDEN RULE OF ANALYSIS ---",
-        "When a user asks to analyze a specific event or stage (e.g., 'enrollments', 'Sent To Site'), your analysis MUST be based on the timestamp of THAT SPECIFIC EVENT.",
+        
         "\n--- AVAILABLE VARIABLES & DATAFRAMES ---",
         "1.  `site_performance_df`: Pre-computed DataFrame with aggregate site metrics.",
         "2.  `utm_performance_df`: Pre-computed DataFrame with aggregate UTM metrics.",
         "3.  `df`: The raw master DataFrame.",
         "4.  `ts_col_map`: Dictionary mapping stage names to timestamp columns.",
+        
+        "\n--- CRITICAL CODING RULE ---",
+        "For any time-series grouping (e.g., 'by week' or 'by month'), you MUST use the `pd.Grouper` method as shown in the example above. Do not use `.resample()` on a grouped object.",
+        
         "\n--- DATAFRAME SCHEMAS ---",
         f"**`site_performance_df` Schema:**\n{_site_perf_info}",
         f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
         "\n--- RAW `df` SCHEMA ---",
-        _df_info
+        _df_info,
     ]
     return "\n".join(prompt_parts)
 
