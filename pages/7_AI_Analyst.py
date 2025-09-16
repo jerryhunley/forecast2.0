@@ -47,8 +47,7 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# --- ALL HELPER FUNCTIONS ARE DEFINED HERE, BEFORE THEY ARE CALLED ---
-
+# --- System Prompts for the Advanced Agent ---
 @st.cache_data
 def get_df_info(df):
     buffer = StringIO()
@@ -56,50 +55,36 @@ def get_df_info(df):
     return buffer.getvalue()
 
 @st.cache_data
-def get_coder_prompt(_df_info, _ts_col_map_str):
-    # This prompt uses a strict Chain-of-Thought (CoT) and forces the AI to state its column choices.
+def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
     prompt_parts = [
-        "You are an expert Python data analyst. Your goal is to write a Python code block to solve the user's request.",
+        "You are a world-class Python data analyst. Your goal is to answer a user's question by first creating a 'Thought' process and then writing the `Code` to execute it.",
         "\n--- RESPONSE FORMAT ---",
         "You MUST respond in two parts:",
-        "1.  **Thought:** A brief, step-by-step thought process explaining how you will approach the request. **You MUST explicitly state the full, exact column names you will use from the schema provided.**",
+        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. **You MUST explicitly state the full, exact column names you will use.**",
         "2.  **Code:** A single, executable Python code block that implements your plan.",
-        "\n--- EXAMPLE ---",
-        "User Request: \"How many total enrollments were there?\"",
-        "Thought: The user wants the total number of enrollments. The Golden Rule says I must use the timestamp for this event. I will use the `ts_col_map` to find the correct column for 'Enrolled', which is `TS_Enrolled`. I will then count the non-null values in that specific column.",
-        "```python",
-        "enrollment_col = ts_col_map.get('Enrolled')",
-        "if enrollment_col:",
-        "    enrollment_count = df[enrollment_col].notna().sum()",
-        "    print(f'Total Enrollments: {enrollment_count}')",
-        "else:",
-        "    print('Enrollment timestamp column not found.')",
-        "```",
-        "\n--- THE GOLDEN RULE OF ANALYSIS ---",
-        "When a user asks to analyze a specific event or stage (e.g., 'enrollments', 'Sent To Site'), your analysis MUST be based on the timestamp of THAT SPECIFIC EVENT.",
-        "\n--- AVAILABLE TOOLS & LIBRARIES ---",
-        "- `df`: The master pandas DataFrame.",
-        "- Pre-loaded functions: `calculate_grouped_performance_metrics()`, `calculate_avg_lag_generic()`.",
-        "- Libraries: `pandas as pd`, `numpy as np`, `streamlit as st`, `matplotlib.pyplot as plt`, `altair as alt`, `plotly.graph_objects as go`.",
+        "\n--- AVAILABLE TOOLS (HIERARCHY OF PREFERENCE) ---",
+        "1.  **`site_performance_df` (HIGHEST PRIORITY):** A pre-computed pandas DataFrame. Use this for ANY question about site performance.",
+        "2.  **`utm_performance_df` (HIGH PRIORITY):** A pre-computed pandas DataFrame. Use this for any question about marketing channel performance.",
+        "3.  **`df` (LOWEST PRIORITY):** The raw master DataFrame. Only use this for ad-hoc queries that cannot be answered by the pre-computed DataFrames.",
         "\n--- CRITICAL CODING RULES ---",
-        "1.  **Primary Date Column:** For general date filtering (e.g., 'last month'), use the `'Submitted On_DT'` column.",
-        "2.  **DataFrame Display:** Before using `st.dataframe()`, you MUST drop the complex 'Parsed_' columns.",
-        "3.  **Time-Series Resampling:** To count events 'by week' or 'by month', you MUST use `pd.Grouper` with the specific event timestamp column as the `key`.",
-        "4.  **Final Output:** You MUST display your result using an appropriate function like `st.dataframe()` or `print()`.",
-        "5.  **DEFENSIVE CODING:** Always check for division by zero and handle `NaN`/`inf` values.",
-        "\n--- DATAFRAME `df` SCHEMA (Use these exact column names) ---",
+        "- **The Golden Rule:** Analysis of a specific event (e.g., 'enrollments') MUST be based on the timestamp of THAT event.",
+        "- **Primary Date Column:** For general filtering on the raw `df`, use `'Submitted On_DT'`.",
+        "- **Time-Series Resampling:** To count events by week/month, you MUST use `pd.Grouper` with the specific event timestamp column as the `key`.",
+        "- **DEFENSIVE CODING:** Handle division by zero and `NaN` values using `np.nan` and `np.inf`.",
+        "\n--- PRE-COMPUTED DATAFRAME SCHEMAS ---",
+        f"**`site_performance_df` Schema:**\n{_site_perf_info}",
+        f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
+        "\n--- RAW `df` SCHEMA ---",
         _df_info,
         "-----------------------------",
-        "\n--- CONTEXT VARIABLES ---",
-        f"- `ts_col_map`: `{_ts_col_map_str}`",
+        f"\n- `ts_col_map` dictionary for raw df: `{_ts_col_map_str}`",
         "-----------------------------\n",
     ]
     return "\n".join(prompt_parts)
 
 @st.cache_data
 def get_synthesizer_prompt():
-    return """You are an expert business analyst and senior strategist for a clinical trial company.
-Your goal is to provide a single, cohesive, and insightful executive summary based on a series of data analyses.
+    return """You are an expert business analyst and senior strategist. Your goal is to provide a single, cohesive, and insightful executive summary based on a series of data analyses.
 You will be given the user's original complex question, the AI's thought process, the Python code executed, and the raw data result from that code.
 - **Start with a bolded headline** that directly answers the user's core question.
 - **Weave the results into a narrative.**
@@ -131,8 +116,9 @@ if st.session_state.messages and st.session_state.messages[-1]["role"] == "user"
 
     with st.spinner("AI is forming a plan and writing code..."):
         try:
-            # THIS IS WHERE THE NAMEERROR WAS. THE FUNCTION CALL IS NOW AFTER THE DEFINITION.
+            # --- THIS IS THE CORRECTED FUNCTION CALL ---
             coder_prompt = get_coder_prompt(get_df_info(df), str(ts_col_map), site_perf_info, utm_perf_info)
+            
             full_coder_prompt = coder_prompt + f"\n\nUser Question: {user_prompt}"
             response = model.generate_content(full_coder_prompt)
             
