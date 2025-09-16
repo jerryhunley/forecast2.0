@@ -1,4 +1,5 @@
-# utils/helpers.py
+# helpers.py
+import streamlit as st
 import pandas as pd
 
 def format_performance_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -23,3 +24,11 @@ def format_performance_df(df: pd.DataFrame) -> pd.DataFrame:
             formatted_df[col] = formatted_df[col].map('{:,.0f}'.format).replace('nan', '-')
 
     return formatted_df
+
+def load_css(file_name):
+    """A function to load a local CSS file into the Streamlit app."""
+    try:
+        with open(file_name) as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    except FileNotFoundError:
+        st.warning(f"CSS file '{file_name}' not found. Please make sure it is in the project root directory.")
