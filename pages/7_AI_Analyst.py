@@ -56,29 +56,32 @@ def get_df_info(df):
 
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
+    # This is the final, most robust version of the prompt.
     prompt_parts = [
-        "You are a world-class Python data analyst. Your goal is to answer a user's question by first creating a 'Thought' process and then writing the `Code` to execute it.",
+        "You are an expert Python data analyst. Your goal is to write a Python code block to solve the user's request.",
         "\n--- RESPONSE FORMAT ---",
         "You MUST respond in two parts:",
-        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. **You MUST explicitly state the full, exact column names you will use.**",
+        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. You MUST explicitly state the full, exact column and variable names you will use.",
         "2.  **Code:** A single, executable Python code block that implements your plan.",
-        "\n--- AVAILABLE TOOLS (HIERARCHY OF PREFERENCE) ---",
-        "1.  **`site_performance_df` (HIGHEST PRIORITY):** A pre-computed pandas DataFrame. Use this for ANY question about site performance.",
-        "2.  **`utm_performance_df` (HIGH PRIORITY):** A pre-computed pandas DataFrame. Use this for any question about marketing channel performance.",
+        "\n--- AVAILABLE VARIABLES & TOOLS ---",
+        "You have access to a specific set of pre-loaded DataFrames and variables. You are ONLY allowed to use the variables on this list. DO NOT invent new variable names.",
+        "1.  **`site_performance_df` (HIGHEST PRIORITY):** A pre-computed pandas DataFrame with all key performance metrics for every site. Use this for ANY question about site performance, rankings, or comparisons.",
+        "2.  **`utm_performance_df` (HIGH PRIORITY):** A pre-computed pandas DataFrame with performance metrics for each UTM source.",
         "3.  **`df` (LOWEST PRIORITY):** The raw master DataFrame. Only use this for ad-hoc queries that cannot be answered by the pre-computed DataFrames.",
+        "4.  **`ts_col_map`**: A dictionary mapping stage names to timestamp column names for use with the raw `df`.",
+        "5.  **Libraries:** `pandas as pd`, `numpy as np`, `streamlit as st`, etc.",
         "\n--- CRITICAL CODING RULES ---",
         "- **The Golden Rule:** Analysis of a specific event (e.g., 'enrollments') MUST be based on the timestamp of THAT event.",
-        "- **Primary Date Column:** For general filtering on the raw `df`, use `'Submitted On_DT'`.",
-        "- **Time-Series Resampling:** To count events by week/month, you MUST use `pd.Grouper` with the specific event timestamp column as the `key`.",
-        "- **DEFENSIVE CODING:** Handle division by zero and `NaN` values using `np.nan` and `np.inf`.",
+        "- **Primary Date Column:** For general date filtering on the raw `df`, use `'Submitted On_DT'`.",
+        "- **Time-Series Resampling:** To count events 'by week' or 'by month', you MUST use `pd.Grouper` with the specific event timestamp column as the `key`.",
+        "- **Final Output:** You MUST display your result using `st.dataframe()`, `st.pyplot()`, etc.",
+        "- **DEFENSIVE CODING:** Always check for division by zero.",
         "\n--- PRE-COMPUTED DATAFRAME SCHEMAS ---",
         f"**`site_performance_df` Schema:**\n{_site_perf_info}",
         f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
         "\n--- RAW `df` SCHEMA ---",
         _df_info,
         "-----------------------------",
-        f"\n- `ts_col_map` dictionary for raw df: `{_ts_col_map_str}`",
-        "-----------------------------\n",
     ]
     return "\n".join(prompt_parts)
 
