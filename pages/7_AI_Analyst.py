@@ -268,4 +268,3 @@ if st.session_state.agent_run:
         st.session_state.messages.append({"role": "assistant", "content": f"**Executive Summary:**\n{summary_text}"})
         # Reset the agent run so the user can ask a new question
         st.session_state.agent_run = None
-        st.rerun()
