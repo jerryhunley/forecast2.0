@@ -5,24 +5,27 @@ from datetime import datetime
 import io
 import os
 
-# Direct imports from modules in the root directory
+# --- Utility and Constant Imports ---
 from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
 from constants import *
+from helpers import load_css # <-- IMPORT THE NEW FUNCTION
 
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Recruitment Forecasting Tool",
-    page_icon="📊",
+    page_icon="📊", # You can also use a path to your favicon.png here
     layout="wide"
 )
+
+# --- APPLY THE CUSTOM CSS ---
+load_css("style.css")
 
 st.title("📊 Recruitment Forecasting Tool")
 st.header("Home & Data Setup")
 
 # --- Session State Initialization ---
-# (This section remains unchanged, no need to copy it if it's already there)
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
@@ -52,9 +55,8 @@ for key in required_keys:
 
 # --- Sidebar for Global Settings and Uploads ---
 with st.sidebar:
+    st.logo("assets/logo.png", link="https://1nhealth.com")
     st.header("⚙️ Setup")
-
-    # --- NEW: Added a welcome message and instructions to the sidebar ---
     st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
 
     st.warning("🔒 **Privacy Notice:** Do not upload files containing PII.", icon="⚠️")
@@ -70,7 +72,6 @@ with st.sidebar:
 
     st.divider()
 
-    # --- NEW: Grouped all settings into collapsible expanders ---
     with st.expander("⚙️ Global Assumptions & Weights"):
         st.subheader("Historical Ad Spend")
         edited_df = st.data_editor(
@@ -153,7 +154,6 @@ with st.sidebar:
         st.session_state.ai_ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5)
 
 # --- Main Page Content & Data Processing Trigger ---
-# ... (This section remains unchanged) ...
 if uploaded_referral_file and uploaded_funnel_def_file:
     st.info("Files uploaded. Click the button below to process and load the data.")
     if st.button("Process Uploaded Data", type="primary"):
@@ -197,7 +197,6 @@ if st.session_state.data_processed_successfully:
     st.success("Data is loaded and ready.")
     st.info("👈 Please select an analysis page from the sidebar to view the results.")
 else:
-    # --- NEW: Improved welcome message on the main page ---
     st.info("👋 **Welcome to the Recruitment Forecasting Tool!**")
     st.write("")
     st.write("This application helps you analyze historical recruitment data to forecast future performance. To get started:")
