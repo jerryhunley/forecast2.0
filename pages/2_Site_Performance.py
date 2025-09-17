@@ -4,6 +4,9 @@ import pandas as pd
 from scoring import score_sites
 from helpers import format_performance_df, load_css
 
+# --- Set a unique key for this page's widgets ---
+st.session_state.page_key = "site_perf"
+
 # --- Theme Initialization and Page Config ---
 if "theme_selector" not in st.session_state:
     st.session_state.theme_selector = "Dark"
@@ -20,27 +23,22 @@ with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     st.write("") 
 
-    # Determine the index for the radio button based on the current theme
-    # Default to 0 (Dark) if the theme is not set
-    current_theme = st.session_state.get("theme_selector", "Dark")
-    current_index = 0 if current_theme == "Dark" else 1
+    # Determine the current index based on session state
+    current_index = 1 if st.session_state.get("theme_selector") == "Light" else 0
 
     # Create the radio button
     selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
         index=current_index,
-        key="theme_selector_widget", # Use a unique key for the widget itself
+        key=f"theme_selector_{st.session_state.page_key}", # Unique key per page
         horizontal=True,
     )
 
-    # The core logic for theme switching
-    # Check if the user's selection is different from what's stored in session state
+    # If the user's selection has changed, update the state and rerun
     if selected_theme != st.session_state.get("theme_selector"):
-        # If it is, update the session state
         st.session_state.theme_selector = selected_theme
-        # And inject JavaScript to force a full page reload
-        st.html("<script>parent.location.reload()</script>")
+        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
