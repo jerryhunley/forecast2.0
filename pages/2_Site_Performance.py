@@ -4,18 +4,27 @@ import pandas as pd
 from scoring import score_sites
 from helpers import format_performance_df, load_css
 
+# --- Theme Initialization and Page Config ---
 if "theme_selector" not in st.session_state:
     st.session_state.theme_selector = "Dark"
+
 st.set_page_config(page_title="Site Performance", page_icon="🏆", layout="wide")
+
 if st.session_state.theme_selector == "Light":
     load_css("style-light.css")
 else:
     load_css("style-dark.css")
 
+# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     st.write("") 
-    st.radio("Theme", ["Dark", "Light"], key="theme_selector", horizontal=True)
+    st.radio(
+        "Theme",
+        ["Dark", "Light"],
+        key="theme_selector",
+        horizontal=True,
+    )
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
