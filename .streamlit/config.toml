@@ -1,4 +1,2 @@
-# .streamlit/config.toml
-
-# We will define all colors in CSS.
-# This file can be used for other configurations in the future.
+# This file is intentionally left blank for themes.
+# All theme and font settings are now controlled by the CSS files.
