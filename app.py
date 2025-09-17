@@ -10,7 +10,7 @@ from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
 from constants import *
-from helpers import format_performance_df # helpers.py no longer needs load_css
+from helpers import format_performance_df
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -19,19 +19,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Session State Initialization for App Data ---
-# This block is crucial and must run before the sidebar widgets are created.
+# --- Session State Initialization ---
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
-    'historical_spend_df', 'ad_spend_input_dict'
+    'historical_spend_df', 'ad_spend_input_dict',
+    # --- NEW: Initialize weight keys here ---
+    'w_qual_to_enroll', 'w_icf_to_enroll', 'w_qual_to_icf', 'w_avg_ttc',
+    'w_site_sf', 'w_sts_appt', 'w_appt_icf', 'w_lag_q_icf',
+    'w_generic_sf', 'w_proj_lag'
 ]
 default_values = {
     'data_processed_successfully': False,
     'historical_spend_df': pd.DataFrame([
         {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=2)).strftime('%Y-%m'), 'Historical Spend': 45000.0},
         {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=1)).strftime('%Y-%m'), 'Historical Spend': 60000.0}
-    ])
+    ]),
+    # --- NEW: Default values for all weights ---
+    'w_qual_to_enroll': 10, 'w_icf_to_enroll': 10, 'w_qual_to_icf': 20, 'w_avg_ttc': 10,
+    'w_site_sf': 5, 'w_sts_appt': 15, 'w_appt_icf': 15, 'w_lag_q_icf': 5,
+    'w_generic_sf': 5, 'w_proj_lag': 0
 }
 for key in required_keys:
     if key not in st.session_state:
@@ -56,15 +63,7 @@ with st.sidebar:
     st.divider()
 
     with st.expander("Historical Ad Spend"):
-        edited_df = st.data_editor(
-            st.session_state.historical_spend_df,
-            num_rows="dynamic",
-            key="hist_spend_editor",
-            column_config={
-                "Month (YYYY-MM)": st.column_config.TextColumn(help="YYYY-MM format", required=True),
-                "Historical Spend": st.column_config.NumberColumn(format="$%.2f", required=True)
-            }
-        )
+        edited_df = st.data_editor(st.session_state.historical_spend_df, num_rows="dynamic", key="hist_spend_editor")
         temp_spend_dict = {}
         valid_entries = True
         for _, row in edited_df.iterrows():
