@@ -27,7 +27,7 @@ with st.sidebar:
 
 st.title("🤖 Strategic AI Analyst")
 st.info("""
-This advanced AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
+This AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It uses the global scoring weights set on the performance pages.
 """)
 
 # --- Page Guard ---
@@ -40,32 +40,7 @@ df = st.session_state.referral_data_processed
 ts_col_map = st.session_state.ts_col_map
 ordered_stages = st.session_state.ordered_stages
 
-# --- THIS IS THE FIX: Create self-sufficient, synced weights on this page ---
-with st.expander("Adjust Performance Scoring Weights"):
-    st.info("These weights are used by the AI when asked to score or rank performance. They are synced with the weights on the performance pages.")
-    
-    # Initialize session state for all weight keys if they don't exist
-    weight_defaults = {
-        'w_qual_to_enroll': 10, 'w_icf_to_enroll': 10, 'w_qual_to_icf': 20, 'w_avg_ttc': 10,
-        'w_site_sf': 5, 'w_sts_appt': 15, 'w_appt_icf': 15, 'w_lag_q_icf': 5,
-        'w_generic_sf': 5, 'w_proj_lag': 0
-    }
-    for key, value in weight_defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
-    # Create sliders that read from and write to the same session state keys
-    st.session_state.w_qual_to_enroll = st.slider("Qual (POF) -> Enrollment %", 0, 100, st.session_state.w_qual_to_enroll, key="w_q_enr_ai")
-    st.session_state.w_icf_to_enroll = st.slider("ICF -> Enrollment %", 0, 100, st.session_state.w_icf_to_enroll, key="w_icf_enr_ai")
-    st.session_state.w_qual_to_icf = st.slider("Qual (POF) -> ICF %", 0, 100, st.session_state.w_qual_to_icf, key="w_q_icf_ai")
-    st.session_state.w_avg_ttc = st.slider("Avg Time to Contact (Sites)", 0, 100, st.session_state.w_avg_ttc, help="Lower is better.", key="w_ttc_ai")
-    st.session_state.w_site_sf = st.slider("Site Screen Fail %", 0, 100, st.session_state.w_site_sf, help="Lower is better.", key="w_ssf_ai")
-    st.session_state.w_sts_appt = st.slider("StS -> Appt Sched %", 0, 100, st.session_state.w_sts_appt, key="w_sts_appt_ai")
-    st.session_state.w_appt_icf = st.slider("Appt Sched -> ICF %", 0, 100, st.session_state.w_appt_icf, key="w_appt_icf_ai")
-    st.session_state.w_lag_q_icf = st.slider("Lag Qual -> ICF (Days)", 0, 100, st.session_state.w_lag_q_icf, help="Lower is better.", key="w_lag_ai")
-    st.session_state.w_generic_sf = st.slider("Generic Screen Fail % (Ads)", 0, 100, st.session_state.w_generic_sf, help="Lower is better.", key="w_gsf_ai")
-    st.session_state.w_proj_lag = st.slider("Generic Projection Lag (Ads)", 0, 100, st.session_state.w_proj_lag, help="Lower is better.", key="w_gpl_ai")
-
+# --- THIS IS THE FIX: Read weights directly from session state ---
 weights = {
     "Qual to Enrollment %": st.session_state.w_qual_to_enroll,
     "ICF to Enrollment %": st.session_state.w_icf_to_enroll,
