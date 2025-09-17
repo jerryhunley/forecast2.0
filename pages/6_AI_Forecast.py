@@ -39,7 +39,6 @@ weights = st.session_state.get("weights_normalized", {})
 with st.container(border=True):
     st.subheader("Define Your Goals & Assumptions")
     
-    # --- Goal Settings ---
     c1, c2, c3 = st.columns(3)
     with c1:
         goal_lpi_date = st.date_input("Target LPI Date", value=datetime.now() + pd.DateOffset(months=12))
@@ -50,18 +49,16 @@ with st.container(border=True):
 
     st.divider()
     
-    # --- Model Assumption Settings ---
     st.markdown("##### Global Model Assumptions")
     a1, a2, a3, a4 = st.columns(4)
     proj_horizon = a1.number_input("Projection Horizon (Months)", 1, 48, 12)
     icf_variation = a2.slider("Projected ICF Variation (+/- %)", 0, 50, 10)
     cpql_inflation = a3.slider("CPQL Inflation Factor (%)", 0.0, 25.0, 5.0, 0.5)
     ql_vol_threshold = a4.slider("QL Volume Increase Threshold (%)", 1.0, 50.0, 10.0, 1.0)
-    ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5)
+    ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5, help="Controls how aggressively the AI plans monthly lead generation.")
         
     st.divider()
 
-    # --- Lag and Rate Assumptions ---
     st.markdown("##### Lag & Conversion Rate Assumptions")
     lag_method = st.radio(
         "ICF Landing Lag Assumption:",
@@ -142,7 +139,10 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
             site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input={},
             site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
             cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-            run_mode="primary", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+            run_mode="primary",
+            # --- THIS IS THE FIX ---
+            ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+            # ----------------------
             ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
             baseline_monthly_ql_volume_override=baseline_ql_volume
         )
@@ -162,7 +162,10 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
                 site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input={},
                 site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
                 cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-                run_mode="best_case_extended_lpi", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+                run_mode="best_case_extended_lpi",
+                # --- THIS IS THE FIX ---
+                ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+                # ----------------------
                 ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
                 baseline_monthly_ql_volume_override=baseline_ql_volume
             )
