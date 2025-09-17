@@ -1,5 +1,6 @@
 # app.py
 import streamlit as st
+from streamlit_toggle_switch import st_toggle_switch
 import pandas as pd
 from datetime import datetime
 import io
@@ -10,22 +11,32 @@ from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
 from constants import *
-from helpers import load_css # <-- IMPORT THE NEW FUNCTION
+from helpers import load_css
+
+# --- Theme Initialization ---
+# Initialize the theme in session state if it doesn't exist. Default to dark.
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
 
 # --- Page Configuration ---
+# The actual theme is set dynamically in the sidebar logic now.
 st.set_page_config(
     page_title="Recruitment Forecasting Tool",
-    page_icon="📊", # You can also use a path to your favicon.png here
+    page_icon="assets/favicon.png", # Make sure you have a favicon in your assets folder
     layout="wide"
 )
 
-# --- APPLY THE CUSTOM CSS ---
-load_css("style.css")
+# --- Apply the correct CSS file based on the theme in session state ---
+if st.session_state.theme == "light":
+    load_css("style-light.css")
+else:
+    load_css("style-dark.css")
 
+# --- Main Page Title ---
 st.title("📊 Recruitment Forecasting Tool")
 st.header("Home & Data Setup")
 
-# --- Session State Initialization ---
+# --- Session State Initialization for App Data ---
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
@@ -53,9 +64,26 @@ for key in required_keys:
         st.session_state[key] = default_values.get(key, None)
 
 
-# --- Sidebar for Global Settings and Uploads ---
+# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
+    
+    # --- THEME TOGGLE LOGIC ---
+    st.write("") # Spacer
+    current_theme_is_light = (st.session_state.theme == "light")
+    
+    # We use a temporary variable to capture the toggle's state change
+    toggled = st_toggle_switch(
+        label="Light Mode",
+        key="theme_switch",
+        default_value=current_theme_is_light,
+    )
+    
+    # If the toggle state changed, update the session state and rerun
+    if toggled != current_theme_is_light:
+        st.session_state.theme = "light" if toggled else "dark"
+        st.rerun()
+
     st.header("⚙️ Setup")
     st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
 
@@ -72,8 +100,7 @@ with st.sidebar:
 
     st.divider()
 
-    # --- FIX: Emojis are back in the expander labels ---
-    with st.expander("⚙️ Global Assumptions & Weights"):
+    with st.expander("Global Assumptions & Weights"):
         st.subheader("Historical Ad Spend")
         edited_df = st.data_editor(
             st.session_state.historical_spend_df,
@@ -119,7 +146,7 @@ with st.sidebar:
         st.session_state.weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
 
 
-    with st.expander("📈 Projection & AI Assumptions"):
+    with st.expander("Projection & AI Assumptions"):
         st.subheader("General Settings")
         st.session_state.proj_horizon = st.number_input("Projection Horizon (Months)", 1, 48, 12)
         st.session_state.proj_goal_icf = st.number_input("Goal ICFs (for 'Projections' Page)", 1, 10000, 100)
