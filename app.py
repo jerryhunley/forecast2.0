@@ -5,31 +5,29 @@ from datetime import datetime
 import io
 import os
 
-# --- Utility and Constant Imports ---
+# Utility and Constant Imports
 from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
 from constants import *
 from helpers import load_css
 
-# --- Theme Initialization ---
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
+# --- Theme Initialization and Page Config ---
+if "theme_selector" not in st.session_state:
+    st.session_state.theme_selector = "Dark"
 
-# --- Page Configuration ---
 st.set_page_config(
     page_title="Recruitment Forecasting Tool",
-    page_icon="assets/favicon.png", # Make sure you have a favicon.png in your assets folder
+    page_icon="assets/favicon.png", 
     layout="wide"
 )
 
-# --- Apply the correct CSS file based on the theme in session state ---
-if st.session_state.theme == "light":
+if st.session_state.theme_selector == "Light":
     load_css("style-light.css")
 else:
     load_css("style-dark.css")
 
-# --- Session State Initialization MUST happen before widgets are created ---
+# --- Session State Initialization for App Data ---
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
@@ -45,50 +43,34 @@ default_values = {
         {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=2)).strftime('%Y-%m'), 'Historical Spend': 45000.0},
         {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=1)).strftime('%Y-%m'), 'Historical Spend': 60000.0}
     ]),
-    'proj_horizon': 12,
-    'proj_goal_icf': 100,
-    'shared_icf_variation': 10,
-    'ai_cpql_inflation': 5.0,
-    'ai_ql_vol_threshold': 10.0,
-    'ai_ql_capacity_multiplier': 3.0
+    'proj_horizon': 12, 'proj_goal_icf': 100, 'shared_icf_variation': 10,
+    'ai_cpql_inflation': 5.0, 'ai_ql_vol_threshold': 10.0, 'ai_ql_capacity_multiplier': 3.0
 }
 for key in required_keys:
     if key not in st.session_state:
         st.session_state[key] = default_values.get(key, None)
 
-
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
-    
-    st.write("") # Spacer
+    st.write("") 
 
-    # --- CORRECTED AND SIMPLIFIED THEME TOGGLE LOGIC ---
-    selected_theme = st.radio(
+    st.radio(
         "Theme",
         ["Dark", "Light"],
-        captions=["", ""], # Hides the labels below the radio buttons
-        index=0 if st.session_state.theme == "dark" else 1,
-        key="theme_selector", # The key can be the same on all pages
+        key="theme_selector",
         horizontal=True,
     )
-
-    new_theme_value = "light" if selected_theme == "Light" else "dark"
-    if new_theme_value != st.session_state.theme:
-        st.session_state.theme = new_theme_value
-        st.rerun()
-
+    
     st.header("⚙️ Setup")
-    st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
-
+    st.info("Start here by uploading your data files.")
     st.warning("🔒 **Privacy Notice:** Do not upload files containing PII.", icon="⚠️")
     pii_checkbox = st.checkbox("I confirm my files do not contain PII.")
 
     if pii_checkbox:
-        uploaded_referral_file = st.file_uploader("1. Upload Referral Data (CSV)", type=["csv"], key="uploader_referral")
-        uploaded_funnel_def_file = st.file_uploader("2. Upload Funnel Definition (CSV/TSV)", type=["csv", "tsv"], key="uploader_funnel")
+        uploaded_referral_file = st.file_uploader("1. Upload Referral Data (CSV)", type=["csv"])
+        uploaded_funnel_def_file = st.file_uploader("2. Upload Funnel Definition (CSV/TSV)", type=["csv", "tsv"])
     else:
-        st.info("Please confirm the PII checkbox to enable file uploads.")
         uploaded_referral_file = None
         uploaded_funnel_def_file = None
 
@@ -96,15 +78,7 @@ with st.sidebar:
 
     with st.expander("Global Assumptions & Weights"):
         st.subheader("Historical Ad Spend")
-        edited_df = st.data_editor(
-            st.session_state.historical_spend_df,
-            num_rows="dynamic",
-            key="hist_spend_editor",
-            column_config={
-                "Month (YYYY-MM)": st.column_config.TextColumn(help="YYYY-MM format", required=True),
-                "Historical Spend": st.column_config.NumberColumn(format="$%.2f", required=True)
-            }
-        )
+        edited_df = st.data_editor(st.session_state.historical_spend_df, num_rows="dynamic", key="hist_spend_editor")
         temp_spend_dict = {}
         valid_entries = True
         for _, row in edited_df.iterrows():
@@ -121,7 +95,6 @@ with st.sidebar:
             st.session_state.historical_spend_df = edited_df
         
         st.divider()
-
         st.subheader("Performance Scoring Weights")
         weights = {
             "Qual to Enrollment %": st.slider("Qual (POF) -> Enrollment %", 0, 100, 10),
@@ -138,7 +111,6 @@ with st.sidebar:
         }
         total_weight = sum(abs(w) for w in weights.values())
         st.session_state.weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
-
 
     with st.expander("Projection & AI Assumptions"):
         st.subheader("General Settings")
@@ -175,15 +147,14 @@ with st.sidebar:
         st.session_state.ai_ql_vol_threshold = st.slider("QL Volume Increase Threshold (%)", 1.0, 50.0, 10.0, 1.0)
         st.session_state.ai_ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5)
 
-# --- Main Page Content ---
+
 st.title("📊 Recruitment Forecasting Tool")
 st.header("Home & Data Setup")
 
-# --- Data Processing Trigger ---
 if uploaded_referral_file and uploaded_funnel_def_file:
     st.info("Files uploaded. Click the button below to process and load the data.")
     if st.button("Process Uploaded Data", type="primary"):
-        with st.spinner("Parsing files and processing data... This may take a moment."):
+        with st.spinner("Parsing files and processing data..."):
             try:
                 referral_bytes_data = uploaded_referral_file.getvalue()
                 header_df = pd.read_csv(io.BytesIO(referral_bytes_data), nrows=0, low_memory=False)
@@ -211,24 +182,21 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                         st.success("Data processed successfully!")
                         st.rerun()
                     else:
-                        st.error("Data processing failed after preprocessing. Please check the referral file contents and format.")
+                        st.error("Data processing failed after preprocessing.")
                 else:
-                    st.error("Funnel definition parsing failed. Please check the funnel file.")
+                    st.error("Funnel definition parsing failed.")
             except Exception as e:
                 st.error(f"An error occurred during processing: {e}")
                 st.exception(e)
 
-# --- Instructions for the User ---
 if st.session_state.data_processed_successfully:
     st.success("Data is loaded and ready.")
     st.info("👈 Please select an analysis page from the sidebar to view the results.")
 else:
     st.info("👋 **Welcome to the Recruitment Forecasting Tool!**")
-    st.write("")
-    st.write("This application helps you analyze historical recruitment data to forecast future performance. To get started:")
     st.markdown("""
-        1.  **Confirm No PII**: Check the box in the sidebar to confirm your files are free of Personally Identifiable Information.
-        2.  **Upload Your Data**: Use the file uploaders in the sidebar to provide your referral data and funnel definition files.
-        3.  **Process Data**: Click the "Process Uploaded Data" button that will appear here.
-        4.  **Explore**: Once processing is complete, the analysis pages will become available in the sidebar.
+        1.  **Confirm No PII**: Check the box in the sidebar.
+        2.  **Upload Your Data**: Use the file uploaders in the sidebar.
+        3.  **Process Data**: Click the "Process Uploaded Data" button.
+        4.  **Explore**: Navigate to the analysis pages.
     """)
