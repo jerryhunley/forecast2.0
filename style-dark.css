@@ -1,20 +1,15 @@
 /* style-dark.css */
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap');
 
-/* --- DARK THEME OVERRIDES --- */
+/* --- DARK THEME DEFINITION --- */
 body {
-    background-color: #1B2222; /* Eerie Black */
-    color: #F8F8F8; /* Seasalt */
+    background-color: #1B2222 !important; /* Eerie Black */
+    color: #F8F8F8 !important; /* Seasalt */
 }
 
 /* Sidebar styling */
 [data-testid="stSidebar"] {
-    background-color: #293434; /* Darker secondary background */
-}
-
-/* Main content area */
-.main .block-container {
-    background-color: #1B2222;
+    background-color: #293434 !important; /* Darker secondary background */
 }
 
 /* Card styling */
@@ -24,7 +19,7 @@ body {
     padding: 1.5em;
 }
 
-/* Font application */
+/* Ensure all text uses the correct font */
 html, body, [class*="st-"], [class*="css-"] {
     font-family: 'Manrope', sans-serif;
 }
