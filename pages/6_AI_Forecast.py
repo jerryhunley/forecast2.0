@@ -8,10 +8,12 @@ from datetime import datetime
 from forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
 from calculations import calculate_avg_lag_generic
 from constants import *
-from helpers import format_performance_df # Assuming you might want this for display later
+from helpers import format_performance_df
 
+# --- Page Configuration ---
 st.set_page_config(page_title="AI Forecast", page_icon="🤖", layout="wide")
 
+# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
 
@@ -21,11 +23,12 @@ Define your recruitment goals. The tool will estimate a monthly plan to meet you
 Settings are configured on the Home page sidebar.
 """)
 
+# --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
 
-# Load data from session state
+# --- Load Data from Session State ---
 processed_data = st.session_state.referral_data_processed
 ordered_stages = st.session_state.ordered_stages
 ts_col_map = st.session_state.ts_col_map
@@ -38,7 +41,7 @@ ql_vol_threshold = st.session_state.ai_ql_vol_threshold
 ql_capacity_multiplier = st.session_state.ai_ql_capacity_multiplier
 proj_horizon = st.session_state.proj_horizon
 
-# --- UI CONTROLS MOVED ONTO THE MAIN PAGE ---
+# --- Page-Specific Controls ---
 with st.container(border=True):
     st.subheader("Define Your Goals & Assumptions")
     
@@ -50,7 +53,7 @@ with st.container(border=True):
     with c3:
         base_cpql = st.number_input("Base Estimated CPQL (POF)", min_value=1.0, value=75.0, step=5.0, format="%.2f")
 
-    st.write("") # Spacer
+    st.write("")
     
     lag_method = st.radio(
         "ICF Landing Lag Assumption:",
@@ -120,7 +123,6 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
                 if not monthly_counts.empty:
                     baseline_ql_volume = monthly_counts.nlargest(6).mean()
         
-        # Run primary forecast
         (
             df_primary, site_df_primary, ads_off_primary,
             message_primary, is_unfeasible_primary, actual_icfs_primary
@@ -140,7 +142,6 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
 
         if is_unfeasible_primary:
             st.info("Initial forecast is unfeasible. Running a 'best-case' scenario with an extended LPI date...")
-            # Run best-case scenario
             (
                 df_best, site_df_best, ads_off_best,
                 message_best, is_unfeasible_best, actual_icfs_best
