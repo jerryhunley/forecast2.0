@@ -3,17 +3,40 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
+
+# Direct imports from modules in the root directory
 from forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
 from calculations import calculate_avg_lag_generic
 from constants import *
-from helpers import format_performance_df
+from helpers import load_css
 
-# --- Page Configuration ---
+# --- Theme Initialization and Page Config ---
+if "theme_selector" not in st.session_state:
+    st.session_state.theme_selector = "Dark"
+
 st.set_page_config(page_title="AI Forecast", page_icon="🤖", layout="wide")
+
+if st.session_state.theme_selector == "Light":
+    load_css("style-light.css")
+else:
+    load_css("style-dark.css")
 
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
+    st.write("") 
+    st.radio(
+        "Theme",
+        ["Dark", "Light"],
+        key="theme_selector",
+        horizontal=True,
+    )
+
+st.title("🤖 AI Forecast (Goal-Based)")
+st.info("""
+Define your recruitment goals. The tool will estimate a monthly plan to meet your Last Patient In (LPI) date.
+Settings for CPQL Inflation and Monthly QL Capacity can be adjusted in the sidebar on the Home page.
+""")
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
@@ -45,7 +68,7 @@ with st.container(border=True):
     with c3:
         base_cpql = st.number_input("Base Estimated CPQL (POF)", min_value=1.0, value=75.0, step=5.0, format="%.2f")
 
-    st.write("") # Spacer
+    st.write("")
     
     lag_method = st.radio(
         "ICF Landing Lag Assumption:",
@@ -73,19 +96,30 @@ with st.container(border=True):
             format_func=lambda x: "Overall Average" if x == 999 else f"{x}-Month",
             key='ai_rolling_window'
         )
-
-    cr1, cr2 = st.columns(2)
+    
+    # --- CORRECTED: Use 4 columns for 4 sliders ---
+    cr1, cr2, cr3, cr4 = st.columns(4)
     manual_rates = {
         f"{STAGE_PASSED_ONLINE_FORM} -> {STAGE_PRE_SCREENING_ACTIVITIES}": cr1.slider("AI: POF -> PreScreen %", 0.0, 100.0, 90.0, format="%.1f%%", key='ai_cr_qps') / 100.0,
-        f"{STAGE_PRE_SCREENING_ACTIVITIES} -> {STAGE_SENT_TO_SITE}": cr1.slider("AI: PreScreen -> StS %", 0.0, 100.0, 25.0, format="%.1f%%", key='ai_cr_pssts') / 100.0,
-        f"{STAGE_SENT_TO_SITE} -> {STAGE_APPOINTMENT_SCHEDULED}": cr2.slider("AI: StS -> Appt %", 0.0, 100.0, 50.0, format="%.1f%%", key='ai_cr_sa') / 100.0,
-        f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}": cr2.slider("AI: Appt -> ICF %", 0.0, 100.0, 60.0, format="%.1f%%", key='ai_cr_ai') / 100.0
+        f"{STAGE_PRE_SCREENING_ACTIVITIES} -> {STAGE_SENT_TO_SITE}": cr2.slider("AI: PreScreen -> StS %", 0.0, 100.0, 25.0, format="%.1f%%", key='ai_cr_pssts') / 100.0,
+        f"{STAGE_SENT_TO_SITE} -> {STAGE_APPOINTMENT_SCHEDULED}": cr3.slider("AI: StS -> Appt %", 0.0, 100.0, 50.0, format="%.1f%%", key='ai_cr_sa') / 100.0,
+        f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}": cr4.slider("AI: Appt -> ICF %", 0.0, 100.0, 60.0, format="%.1f%%", key='ai_cr_ai') / 100.0
     }
 
 with st.expander("Optional Site Configurations"):
-    # Site Activity Dates & Caps go here
-    pass # Placeholder for your existing site config code
+    st.caption("Define when sites are active for QL allocation. Leave blank if always active.")
+    site_activity_schedule = {}
+    if site_metrics is not None and not site_metrics.empty:
+        site_activity_df_data = [{"Site": s, "Activation Date": None, "Deactivation Date": None} for s in site_metrics['Site'].unique()]
+        edited_activity_df = st.data_editor(pd.DataFrame(site_activity_df_data), hide_index=True, use_container_width=True, key="site_activity_editor")
+        for _, row in edited_activity_df.iterrows():
+            site_activity_schedule[row['Site']] = {
+                'activation_period': pd.Period(row['Activation Date'], 'M') if pd.notna(row['Activation Date']) else None,
+                'deactivation_period': pd.Period(row['Deactivation Date'], 'M') if pd.notna(row['Deactivation Date']) else None,
+            }
+    else:
+        st.info("No site data available to configure.")
 
 if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=True):
-    # The main calculation logic remains the same
-    pass # Placeholder for your existing forecast calculation and display logic
+    # Calculation and display logic goes here
+    pass

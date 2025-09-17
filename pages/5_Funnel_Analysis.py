@@ -2,16 +2,40 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+
+# Direct imports from modules in the root directory
 from forecasting import determine_effective_projection_rates, calculate_pipeline_projection, generate_funnel_narrative
 from constants import *
-from helpers import format_performance_df
+from helpers import load_css
 
-# --- Page Configuration ---
+# --- Theme Initialization and Page Config ---
+if "theme_selector" not in st.session_state:
+    st.session_state.theme_selector = "Dark"
+
 st.set_page_config(page_title="Funnel Analysis", page_icon="🔬", layout="wide")
+
+if st.session_state.theme_selector == "Light":
+    load_css("style-light.css")
+else:
+    load_css("style-dark.css")
 
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
+    st.write("") 
+    st.radio(
+        "Theme",
+        ["Dark", "Light"],
+        key="theme_selector",
+        horizontal=True,
+    )
+
+# --- Page Title ---
+st.title("🔬 Funnel Analysis (Based on Current Pipeline)")
+st.info("""
+This forecast shows the expected outcomes (**ICFs & Enrollments**) from the leads **already in your funnel**.
+It answers the question: "If we stopped all new recruitment activities today, what results would we still see and when?"
+""")
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
@@ -25,7 +49,8 @@ ts_col_map = st.session_state.ts_col_map
 inter_stage_lags = st.session_state.inter_stage_lags
 
 # --- Page-Specific Assumption Controls ---
-with st.expander("Funnel Analysis Assumptions", expanded=True):
+with st.container(border=True):
+    st.subheader("Funnel Analysis Assumptions")
     rate_method = st.radio(
         "Base Funnel Conversion Rates On:",
         options=('Manual Input Below', 'Rolling Historical Average'),
@@ -43,13 +68,14 @@ with st.expander("Funnel Analysis Assumptions", expanded=True):
             key='fa_rolling_window'
         )
 
-    cols_rate = st.columns(3)
+    # --- CORRECTED: Use 5 columns for the 5 sliders ---
+    cols_rate = st.columns(5)
     manual_rates = {
         f"{STAGE_PASSED_ONLINE_FORM} -> {STAGE_PRE_SCREENING_ACTIVITIES}": cols_rate[0].slider("FA: POF -> PreScreen %", 0.0, 100.0, 95.0, key='fa_cr_qps', format="%.1f%%") / 100.0,
-        f"{STAGE_PRE_SCREENING_ACTIVITIES} -> {STAGE_SENT_TO_SITE}": cols_rate[0].slider("FA: PreScreen -> StS %", 0.0, 100.0, 20.0, key='fa_cr_pssts', format="%.1f%%") / 100.0,
-        f"{STAGE_SENT_TO_SITE} -> {STAGE_APPOINTMENT_SCHEDULED}": cols_rate[1].slider("FA: StS -> Appt %", 0.0, 100.0, 45.0, key='fa_cr_sa', format="%.1f%%") / 100.0,
-        f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}": cols_rate[1].slider("FA: Appt -> ICF %", 0.0, 100.0, 55.0, key='fa_cr_ai', format="%.1f%%") / 100.0,
-        f"{STAGE_SIGNED_ICF} -> {STAGE_ENROLLED}": cols_rate[2].slider("FA: ICF -> Enrolled %", 0.0, 100.0, 85.0, key='fa_cr_ie', format="%.1f%%") / 100.0
+        f"{STAGE_PRE_SCREENING_ACTIVITIES} -> {STAGE_SENT_TO_SITE}": cols_rate[1].slider("FA: PreScreen -> StS %", 0.0, 100.0, 20.0, key='fa_cr_pssts', format="%.1f%%") / 100.0,
+        f"{STAGE_SENT_TO_SITE} -> {STAGE_APPOINTMENT_SCHEDULED}": cols_rate[2].slider("FA: StS -> Appt %", 0.0, 100.0, 45.0, key='fa_cr_sa', format="%.1f%%") / 100.0,
+        f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}": cols_rate[3].slider("FA: Appt -> ICF %", 0.0, 100.0, 55.0, key='fa_cr_ai', format="%.1f%%") / 100.0,
+        f"{STAGE_SIGNED_ICF} -> {STAGE_ENROLLED}": cols_rate[4].slider("FA: ICF -> Enrolled %", 0.0, 100.0, 85.0, key='fa_cr_ie', format="%.1f%%") / 100.0
     }
 
 if st.button("🔬 Analyze Current Funnel", type="primary", use_container_width=True):
@@ -87,7 +113,22 @@ if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_ana
         with st.container(border=True):
             st.metric("Total Expected Enrollment Yield from Funnel", f"{results['total_enroll_yield']:,.1f}")
             
-    st.write("") # Spacer
+    st.write("")
+
+    narrative_steps = st.session_state.get('funnel_narrative_data', [])
+    if narrative_steps:
+        with st.container(border=True):
+            st.subheader("Funnel Breakdown")
+            for step in narrative_steps:
+                if step['leads_at_stage'] == 0: continue
+                st.markdown(f"##### From '{step['current_stage']}'")
+                c1, c2, c3 = st.columns(3)
+                c1.metric(f"Leads Currently At This Stage", f"{step['leads_at_stage']:,}")
+                c2.metric(f"Conversion to '{step['next_stage']}'", f"{step['conversion_rate']:.1%}" if step['conversion_rate'] is not None else "N/A")
+                c3.metric(f"Avg. Time to '{step['next_stage']}'", f"{step['lag_to_next_stage']:.1f} Days" if pd.notna(step.get('lag_to_next_stage')) else "N/A")
+                st.divider()
+
+    st.write("")
 
     with st.container(border=True):
         st.subheader("Projected Monthly Landings (Future)")
