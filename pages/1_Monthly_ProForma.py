@@ -1,47 +1,21 @@
 # pages/1_Monthly_ProForma.py
 import streamlit as st
 import pandas as pd
-
-# Direct imports from modules in the root directory
 from calculations import calculate_proforma_metrics
 from helpers import load_css
 
-# --- Theme Initialization ---
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
-
-# --- Page Configuration ---
-st.set_page_config(
-    page_title="Monthly ProForma",
-    page_icon="📅",
-    layout="wide"
-)
-
-# --- Apply the correct CSS file based on the theme in session state ---
-if st.session_state.theme == "light":
+if "theme_selector" not in st.session_state:
+    st.session_state.theme_selector = "Dark"
+st.set_page_config(page_title="Monthly ProForma", page_icon="📅", layout="wide")
+if st.session_state.theme_selector == "Light":
     load_css("style-light.css")
 else:
     load_css("style-dark.css")
 
-# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
-    
-    st.write("") # Spacer
-
-    selected_theme = st.radio(
-        "Theme",
-        ["Dark", "Light"],
-        captions=["", ""],
-        index=0 if st.session_state.theme == "dark" else 1,
-        key="theme_selector",
-        horizontal=True,
-    )
-
-    new_theme_value = "light" if selected_theme == "Light" else "dark"
-    if new_theme_value != st.session_state.theme:
-        st.session_state.theme = new_theme_value
-        st.rerun()
+    st.write("") 
+    st.radio("Theme", ["Dark", "Light"], key="theme_selector", horizontal=True)
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):

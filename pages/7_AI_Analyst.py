@@ -12,45 +12,23 @@ import re
 import plotly.graph_objects as go
 import plotly.express as px
 import sys
-
-# Direct imports from modules in the root directory
 from constants import *
 from calculations import calculate_grouped_performance_metrics, calculate_avg_lag_generic
 from scoring import score_performance_groups
 from helpers import format_performance_df, load_css
 
-# --- Theme Initialization ---
-if "theme" not in st.session_state:
-    st.session_state.theme = "dark"
-
-# --- Page Configuration ---
+if "theme_selector" not in st.session_state:
+    st.session_state.theme_selector = "Dark"
 st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
-
-# --- Apply CSS ---
-if st.session_state.theme == "light":
+if st.session_state.theme_selector == "Light":
     load_css("style-light.css")
 else:
     load_css("style-dark.css")
 
-# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
-    
-    st.write("") # Spacer
-
-    selected_theme = st.radio(
-        "Theme",
-        ["Dark", "Light"],
-        captions=["", ""],
-        index=0 if st.session_state.theme == "dark" else 1,
-        key="theme_selector",
-        horizontal=True,
-    )
-
-    new_theme_value = "light" if selected_theme == "Light" else "dark"
-    if new_theme_value != st.session_state.theme:
-        st.session_state.theme = new_theme_value
-        st.rerun()
+    st.write("") 
+    st.radio("Theme", ["Dark", "Light"], key="theme_selector", horizontal=True)
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
