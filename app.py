@@ -19,47 +19,15 @@ if "theme" not in st.session_state:
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Recruitment Forecasting Tool",
-    page_icon="assets/favicon.png",
+    page_icon="assets/favicon.png", # Make sure you have a favicon.png in your assets folder
     layout="wide"
 )
 
-# Apply the correct CSS based on the theme
+# --- Apply the correct CSS file based on the theme in session state ---
 if st.session_state.theme == "light":
     load_css("style-light.css")
 else:
     load_css("style-dark.css")
-
-st.title("📊 Recruitment Forecasting Tool")
-st.header("Home & Data Setup")
-
-# --- Session State Initialization for App Data ---
-# (This section is unchanged)
-required_keys = [
-    'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
-    'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
-    'weights_normalized', 'historical_spend_df', 'ad_spend_input_dict',
-    'proj_horizon', 'proj_goal_icf', 'proj_spend_dict', 'proj_cpqr_dict',
-    'proj_rate_method', 'proj_manual_rates', 'proj_rolling_window',
-    'shared_icf_variation', 'ai_cpql_inflation', 'ai_ql_vol_threshold',
-    'ai_ql_capacity_multiplier'
-]
-default_values = {
-    'data_processed_successfully': False,
-    'historical_spend_df': pd.DataFrame([
-        {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=2)).strftime('%Y-%m'), 'Historical Spend': 45000.0},
-        {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=1)).strftime('%Y-%m'), 'Historical Spend': 60000.0}
-    ]),
-    'proj_horizon': 12,
-    'proj_goal_icf': 100,
-    'shared_icf_variation': 10,
-    'ai_cpql_inflation': 5.0,
-    'ai_ql_vol_threshold': 10.0,
-    'ai_ql_capacity_multiplier': 3.0
-}
-for key in required_keys:
-    if key not in st.session_state:
-        st.session_state[key] = default_values.get(key, None)
-
 
 # --- Sidebar ---
 with st.sidebar:
@@ -71,7 +39,8 @@ with st.sidebar:
     selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
-        index=1 if st.session_state.theme == "light" else 0,
+        captions=["", ""], # Hides the labels below the radio buttons
+        index=0 if st.session_state.theme == "dark" else 1,
         key="theme_selector", # The key can be the same on all pages
         horizontal=True,
     )
