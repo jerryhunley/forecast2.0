@@ -1,6 +1,5 @@
 # app.py
 import streamlit as st
-from streamlit_toggle_switch import st_toggle_switch # <-- FORCED IMPORT
 import pandas as pd
 from datetime import datetime
 import io
@@ -20,11 +19,11 @@ if "theme" not in st.session_state:
 # --- Page Configuration ---
 st.set_page_config(
     page_title="Recruitment Forecasting Tool",
-    page_icon="assets/favicon.png", 
+    page_icon="assets/favicon.png",
     layout="wide"
 )
 
-# --- Apply the correct CSS file based on the theme in session state ---
+# Apply the correct CSS based on the theme
 if st.session_state.theme == "light":
     load_css("style-light.css")
 else:
@@ -67,18 +66,23 @@ with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
-    current_theme_is_light = (st.session_state.theme == "light")
-    
-    toggled = st_toggle_switch(
-        label="Light Mode",
-        key="theme_switch",
-        default_value=current_theme_is_light,
+
+    # --- NEW: RELIABLE THEME TOGGLE USING st.radio ---
+    def theme_changed():
+        if st.session_state.theme_selector == "Dark":
+            st.session_state.theme = "dark"
+        else:
+            st.session_state.theme = "light"
+
+    theme = st.radio(
+        "Theme",
+        ["Dark", "Light"],
+        index=0 if st.session_state.theme == "dark" else 1,
+        key="theme_selector",
+        on_change=theme_changed,
+        horizontal=True,
     )
     
-    if toggled != current_theme_is_light:
-        st.session_state.theme = "light" if toggled else "dark"
-        st.rerun()
-
     st.header("⚙️ Setup")
     st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
     
