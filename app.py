@@ -1,6 +1,6 @@
 # app.py
 import streamlit as st
-from streamlit_toggle_switch import st_toggle_switch
+from streamlit_toggle_switch import st_toggle_switch # <-- FORCED IMPORT
 import pandas as pd
 from datetime import datetime
 import io
@@ -14,15 +14,13 @@ from constants import *
 from helpers import load_css
 
 # --- Theme Initialization ---
-# Initialize the theme in session state if it doesn't exist. Default to dark.
 if "theme" not in st.session_state:
     st.session_state.theme = "dark"
 
 # --- Page Configuration ---
-# The actual theme is set dynamically in the sidebar logic now.
 st.set_page_config(
     page_title="Recruitment Forecasting Tool",
-    page_icon="assets/favicon.png", # Make sure you have a favicon in your assets folder
+    page_icon="assets/favicon.png", 
     layout="wide"
 )
 
@@ -32,11 +30,11 @@ if st.session_state.theme == "light":
 else:
     load_css("style-dark.css")
 
-# --- Main Page Title ---
 st.title("📊 Recruitment Forecasting Tool")
 st.header("Home & Data Setup")
 
 # --- Session State Initialization for App Data ---
+# (This section is unchanged)
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
@@ -68,25 +66,23 @@ for key in required_keys:
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
-    # --- THEME TOGGLE LOGIC ---
     st.write("") # Spacer
     current_theme_is_light = (st.session_state.theme == "light")
     
-    # We use a temporary variable to capture the toggle's state change
     toggled = st_toggle_switch(
         label="Light Mode",
         key="theme_switch",
         default_value=current_theme_is_light,
     )
     
-    # If the toggle state changed, update the session state and rerun
     if toggled != current_theme_is_light:
         st.session_state.theme = "light" if toggled else "dark"
         st.rerun()
 
     st.header("⚙️ Setup")
     st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
-
+    
+    # ... (the rest of the sidebar and main page logic is unchanged) ...
     st.warning("🔒 **Privacy Notice:** Do not upload files containing PII.", icon="⚠️")
     pii_checkbox = st.checkbox("I confirm my files do not contain PII.")
 
