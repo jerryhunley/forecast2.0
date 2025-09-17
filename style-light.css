@@ -1,16 +1,32 @@
 /* style-light.css */
-
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap');
 
-body, h1, h2, h3, h4, h5, h6, p, li, .stButton>button, .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div, .stMetric>div>div>div {
-    font-family: 'Manrope', sans-serif !important;
+/* --- LIGHT THEME OVERRIDES --- */
+body {
+    background-color: #F8F8F8; /* Seasalt */
+    color: #1B2222; /* Eerie Black */
 }
 
-/* Light mode card styling */
+/* Sidebar styling (Dark sidebar on light theme) */
+[data-testid="stSidebar"] {
+    background-color: #1B2222; /* Eerie Black */
+}
+
+/* Main content area */
+.main .block-container {
+    background-color: #F8F8F8;
+}
+
+/* Card styling */
 [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
-    background-color: #FFFFFF; /* White background for cards */
-    border: 1px solid #E1E6E6; /* Light gray border */
+    background-color: #FFFFFF;
+    border: 1px solid #E1E6E6;
     border-radius: 10px;
     padding: 1.5em;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04); /* Subtle shadow */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* Font application */
+html, body, [class*="st-"], [class*="css-"] {
+    font-family: 'Manrope', sans-serif;
 }
