@@ -1,14 +1,30 @@
 /* style-dark.css */
-
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;700&display=swap');
 
-body, h1, h2, h3, h4, h5, h6, p, li, .stButton>button, .stTextInput>div>div>input, .stTextArea>div>div>textarea, .stSelectbox>div>div>div, .stMetric>div>div>div {
-    font-family: 'Manrope', sans-serif !important;
+/* --- DARK THEME OVERRIDES --- */
+body {
+    background-color: #1B2222; /* Eerie Black */
+    color: #F8F8F8; /* Seasalt */
 }
 
-/* Dark mode card styling */
+/* Sidebar styling */
+[data-testid="stSidebar"] {
+    background-color: #293434; /* Darker secondary background */
+}
+
+/* Main content area */
+.main .block-container {
+    background-color: #1B2222;
+}
+
+/* Card styling */
 [data-testid="stVerticalBlock"] > [style*="flex-direction: column;"] > [data-testid="stVerticalBlock"] {
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 10px;
     padding: 1.5em;
+}
+
+/* Font application */
+html, body, [class*="st-"], [class*="css-"] {
+    font-family: 'Manrope', sans-serif;
 }
