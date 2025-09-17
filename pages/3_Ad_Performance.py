@@ -5,17 +5,30 @@ from calculations import calculate_grouped_performance_metrics
 from scoring import score_performance_groups
 from helpers import format_performance_df
 
-# --- Page Configuration ---
 st.set_page_config(page_title="Ad Performance", page_icon="📢", layout="wide")
 
-# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
 
-# --- Page Guard ---
+st.title("📢 Ad Channel Performance")
+st.info("Performance metrics are scored using the weights defined below.")
+
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
+
+# --- NEW: Assumption Controls directly on the page ---
+with st.expander("Adjust Performance Scoring Weights"):
+    weights = {
+        "Qual to Enrollment %": st.slider("Qual (POF) -> Enrollment %", 0, 100, 10, key="w_q_enr_ad"),
+        "ICF to Enrollment %": st.slider("ICF -> Enrollment %", 0, 100, 10, key="w_icf_enr_ad"),
+        "Qual -> ICF %": st.slider("Qual (POF) -> ICF %", 0, 100, 20, key="w_q_icf_ad"),
+        "Screen Fail % (from ICF)": st.slider("Generic Screen Fail %", 0, 100, 5, help="Lower is better.", key="w_gsf_ad"),
+        "Projection Lag (Days)": st.slider("Generic Projection Lag (Days)", 0, 100, 0, help="Lower is better.", key="w_gpl_ad"),
+    }
+    total_weight = sum(abs(w) for w in weights.values())
+    weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
+    st.caption("Changes will apply automatically.")
 
 # --- Load Data from Session State ---
 processed_data = st.session_state.referral_data_processed

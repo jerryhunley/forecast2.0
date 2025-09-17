@@ -4,21 +4,38 @@ import pandas as pd
 from scoring import score_sites
 from helpers import format_performance_df
 
-# --- Page Configuration ---
 st.set_page_config(page_title="Site Performance", page_icon="🏆", layout="wide")
 
-# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
 
-# --- Page Guard ---
+st.title("🏆 Site Performance Dashboard")
+
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
 
-# --- Load Data from Session State ---
+# --- NEW: Assumption Controls directly on the page ---
+with st.expander("Adjust Performance Scoring Weights"):
+    weights = {
+        "Qual to Enrollment %": st.slider("Qual (POF) -> Enrollment %", 0, 100, 10, key="w_q_enr"),
+        "ICF to Enrollment %": st.slider("ICF -> Enrollment %", 0, 100, 10, key="w_icf_enr"),
+        "Qual -> ICF %": st.slider("Qual (POF) -> ICF %", 0, 100, 20, key="w_q_icf"),
+        "Avg TTC (Days)": st.slider("Avg Time to Contact", 0, 100, 25, help="Lower is better.", key="w_ttc"),
+        "Site Screen Fail %": st.slider("Site Screen Fail %", 0, 100, 5, help="Lower is better.", key="w_ssf"),
+        "StS -> Appt %": st.slider("StS -> Appt Sched %", 0, 100, 30, key="w_sts_appt"),
+        "Appt -> ICF %": st.slider("Appt Sched -> ICF %", 0, 100, 15, key="w_appt_icf"),
+        "Lag Qual -> ICF (Days)": st.slider("Lag Qual (POF) -> ICF (Days)", 0, 100, 0, help="Lower is better.", key="w_lag"),
+    }
+    total_weight = sum(abs(w) for w in weights.values())
+    weights_normalized = {k: v / total_weight for k, v in weights.items()} if total_weight > 0 else {}
+    st.caption("Changes will apply automatically.")
+
+# Load Data from Session State
 site_metrics = st.session_state.site_metrics_calculated
-weights = st.session_state.weights_normalized
+
+if site_metrics is not None and not site_metrics.empty and weights_normalized:
+    ranked_sites_df = score_sites(site_metrics, weights_normalized)
 
 if site_metrics is not None and not site_metrics.empty and weights:
     ranked_sites_df = score_sites(site_metrics, weights)

@@ -2,21 +2,58 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from datetime import datetime
+
 from forecasting import determine_effective_projection_rates, calculate_projections
 from constants import *
-from helpers import format_performance_df
 
-# --- Page Configuration ---
 st.set_page_config(page_title="Projections", page_icon="📈", layout="wide")
 
-# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
 
-# --- Page Guard ---
+st.title("📈 Projections Dashboard")
+st.info("This dashboard forecasts future performance based on the assumptions you configure below.")
+
 if not st.session_state.get('data_processed_successfully', False):
     st.warning("Please upload and process your data on the 'Home & Data Setup' page first.")
     st.stop()
+
+# --- NEW: All assumption controls are now on this page ---
+with st.expander("Configure Projection Assumptions", expanded=True):
+    c1, c2, c3 = st.columns(3)
+    proj_horizon = c1.number_input("Projection Horizon (Months)", 1, 48, 12)
+    goal_icf = c2.number_input("Goal Total ICFs", 1, 10000, 100)
+    icf_variation = c3.slider("Projected ICF Variation (+/- %)", 0, 50, 10)
+
+    st.subheader("Future Spend & CPQR")
+    last_hist_month = st.session_state.referral_data_processed["Submission_Month"].max()
+    future_months = pd.period_range(start=last_hist_month + 1, periods=proj_horizon, freq='M')
+    
+    if 'proj_spend_df_cache' not in st.session_state or len(st.session_state.proj_spend_df_cache) != len(future_months):
+        st.session_state.proj_spend_df_cache = pd.DataFrame({'Month': future_months.strftime('%Y-%m'), 'Planned_Spend': [20000.0] * len(future_months)})
+        st.session_state.proj_cpqr_df_cache = pd.DataFrame({'Month': future_months.strftime('%Y-%m'), 'Assumed_CPQR': [120.0] * len(future_months)})
+
+    spend_col, cpqr_col = st.columns(2)
+    with spend_col:
+        st.write("Planned Spend ($)")
+        edited_spend_df = st.data_editor(st.session_state.proj_spend_df_cache, key='proj_spend_editor_page')
+    with cpqr_col:
+        st.write("Assumed CPQR ($)")
+        edited_cpqr_df = st.data_editor(st.session_state.proj_cpqr_df_cache, key='proj_cpqr_editor_page')
+    
+    spend_dict = {pd.Period(row['Month'], 'M'): row['Planned_Spend'] for _, row in edited_spend_df.iterrows()}
+    cpqr_dict = {pd.Period(row['Month'], 'M'): row['Assumed_CPQR'] for _, row in edited_cpqr_df.iterrows()}
+    
+    st.subheader("Conversion Rates")
+    rate_method = st.radio("Rate Assumption:", ('Manual Input Below', 'Rolling Historical Average'), key='proj_rate_method_radio_page')
+    manual_rates = {}
+    cols = st.columns(4)
+    manual_rates[f"{STAGE_PASSED_ONLINE_FORM} -> {STAGE_PRE_SCREENING_ACTIVITIES}"] = cols[0].slider("POF -> PreScreen %", 0.0, 100.0, 100.0, format="%.1f%%") / 100.0
+    manual_rates[f"{STAGE_PRE_SCREENING_ACTIVITIES} -> {STAGE_SENT_TO_SITE}"] = cols[1].slider("PreScreen -> StS %", 0.0, 100.0, 17.0, format="%.1f%%") / 100.0
+    manual_rates[f"{STAGE_SENT_TO_SITE} -> {STAGE_APPOINTMENT_SCHEDULED}"] = cols[2].slider("StS -> Appt %", 0.0, 100.0, 33.0, format="%.1f%%") / 100.0
+    manual_rates[f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}"] = cols[3].slider("Appt -> ICF %", 0.0, 100.0, 35.0, format="%.1f%%") / 100.0
+    rolling_window = st.selectbox("Rolling Window:", [1, 3, 6, 999], index=1, format_func=lambda x: "Overall" if x == 999 else f"{x}-Month")
 
 # --- Load Data from Session State ---
 processed_data = st.session_state.referral_data_processed
