@@ -1,19 +1,19 @@
 # .streamlit/config.toml
 
-# This command tells Streamlit to use this theme.
+# This sets the default theme to be our custom 'dark' theme.
 [theme]
+base = "dark"
+primaryColor = "#53CA97" # Mint
+backgroundColor = "#1B2222" # Eerie Black
+secondaryBackgroundColor = "#293434"
+textColor = "#F8F8F8"
+font = "sans serif"
 
-# The brand's primary green color for interactive elements
-primaryColor = "#53CA97"  # Mint
-
-# A very dark gray from the color system for the main background
-backgroundColor = "#1B2222"  # Eerie Black
-
-# A slightly lighter dark gray for secondary backgrounds like the sidebar
-secondaryBackgroundColor = "#293434" # A secondary shade from your guide
-
-# A light, off-white color for all text to ensure readability
-textColor = "#F8F8F8"  # Seasalt
-
-# Use the standard sans-serif font which is clean and modern
+# This defines our custom light theme.
+[theme.light]
+base = "light"
+primaryColor = "#53CA97" # Mint
+backgroundColor = "#F8F8F8" # Seasalt (Light Gray)
+secondaryBackgroundColor = "#1B2222" # Eerie Black (for the dark sidebar)
+textColor = "#1B2222" # Eerie Black
 font = "sans serif"
