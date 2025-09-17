@@ -29,6 +29,34 @@ if st.session_state.theme == "light":
 else:
     load_css("style-dark.css")
 
+# --- Session State Initialization MUST happen before widgets are created ---
+required_keys = [
+    'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
+    'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
+    'weights_normalized', 'historical_spend_df', 'ad_spend_input_dict',
+    'proj_horizon', 'proj_goal_icf', 'proj_spend_dict', 'proj_cpqr_dict',
+    'proj_rate_method', 'proj_manual_rates', 'proj_rolling_window',
+    'shared_icf_variation', 'ai_cpql_inflation', 'ai_ql_vol_threshold',
+    'ai_ql_capacity_multiplier'
+]
+default_values = {
+    'data_processed_successfully': False,
+    'historical_spend_df': pd.DataFrame([
+        {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=2)).strftime('%Y-%m'), 'Historical Spend': 45000.0},
+        {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=1)).strftime('%Y-%m'), 'Historical Spend': 60000.0}
+    ]),
+    'proj_horizon': 12,
+    'proj_goal_icf': 100,
+    'shared_icf_variation': 10,
+    'ai_cpql_inflation': 5.0,
+    'ai_ql_vol_threshold': 10.0,
+    'ai_ql_capacity_multiplier': 3.0
+}
+for key in required_keys:
+    if key not in st.session_state:
+        st.session_state[key] = default_values.get(key, None)
+
+
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
@@ -49,11 +77,10 @@ with st.sidebar:
     if new_theme_value != st.session_state.theme:
         st.session_state.theme = new_theme_value
         st.rerun()
-    
+
     st.header("⚙️ Setup")
     st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
-    
-    # ... (the rest of the sidebar and main page logic is unchanged) ...
+
     st.warning("🔒 **Privacy Notice:** Do not upload files containing PII.", icon="⚠️")
     pii_checkbox = st.checkbox("I confirm my files do not contain PII.")
 
@@ -148,7 +175,11 @@ with st.sidebar:
         st.session_state.ai_ql_vol_threshold = st.slider("QL Volume Increase Threshold (%)", 1.0, 50.0, 10.0, 1.0)
         st.session_state.ai_ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5)
 
-# --- Main Page Content & Data Processing Trigger ---
+# --- Main Page Content ---
+st.title("📊 Recruitment Forecasting Tool")
+st.header("Home & Data Setup")
+
+# --- Data Processing Trigger ---
 if uploaded_referral_file and uploaded_funnel_def_file:
     st.info("Files uploaded. Click the button below to process and load the data.")
     if st.button("Process Uploaded Data", type="primary"):
