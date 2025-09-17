@@ -14,10 +14,11 @@ if "theme_selector" not in st.session_state:
 
 st.set_page_config(page_title="Funnel Analysis", page_icon="🔬", layout="wide")
 
+# --- Apply CSS from the assets folder ---
 if st.session_state.theme_selector == "Light":
-    load_css("style-light.css")
+    load_css("assets/style-light.css")
 else:
-    load_css("style-dark.css")
+    load_css("assets/style-dark.css")
 
 # --- Sidebar ---
 with st.sidebar:
@@ -30,7 +31,6 @@ with st.sidebar:
         horizontal=True,
     )
 
-# --- Page Title ---
 st.title("🔬 Funnel Analysis (Based on Current Pipeline)")
 st.info("""
 This forecast shows the expected outcomes (**ICFs & Enrollments**) from the leads **already in your funnel**.
@@ -68,7 +68,6 @@ with st.container(border=True):
             key='fa_rolling_window'
         )
 
-    # --- CORRECTED: Use 5 columns for the 5 sliders ---
     cols_rate = st.columns(5)
     manual_rates = {
         f"{STAGE_PASSED_ONLINE_FORM} -> {STAGE_PRE_SCREENING_ACTIVITIES}": cols_rate[0].slider("FA: POF -> PreScreen %", 0.0, 100.0, 95.0, key='fa_cr_qps', format="%.1f%%") / 100.0,
@@ -115,18 +114,25 @@ if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_ana
             
     st.write("")
 
+    # --- THIS IS THE MISSING NARRATIVE/BREAKDOWN BLOCK ---
     narrative_steps = st.session_state.get('funnel_narrative_data', [])
     if narrative_steps:
         with st.container(border=True):
-            st.subheader("Funnel Breakdown")
+            st.subheader("Funnel Breakdown by Stage")
             for step in narrative_steps:
-                if step['leads_at_stage'] == 0: continue
-                st.markdown(f"##### From '{step['current_stage']}'")
-                c1, c2, c3 = st.columns(3)
-                c1.metric(f"Leads Currently At This Stage", f"{step['leads_at_stage']:,}")
-                c2.metric(f"Conversion to '{step['next_stage']}'", f"{step['conversion_rate']:.1%}" if step['conversion_rate'] is not None else "N/A")
-                c3.metric(f"Avg. Time to '{step['next_stage']}'", f"{step['lag_to_next_stage']:.1f} Days" if pd.notna(step.get('lag_to_next_stage')) else "N/A")
-                st.divider()
+                if step['leads_at_stage'] > 0:
+                    st.markdown(f"##### From '{step['current_stage']}'")
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric(f"Leads Currently At This Stage", f"{step['leads_at_stage']:,}")
+                    c2.metric(f"Conversion to '{step['next_stage']}'", f"{step['conversion_rate']:.1%}" if step['conversion_rate'] is not None else "N/A")
+                    c3.metric(f"Avg. Time to '{step['next_stage']}'", f"{step['lag_to_next_stage']:.1f} Days" if pd.notna(step.get('lag_to_next_stage')) else "N/A")
+                    
+                    if step['downstream_projections']:
+                        with st.expander("View downstream projections from this group"):
+                             for proj in step['downstream_projections']:
+                                time_text = f" in an avg. of **{proj['cumulative_lag_days']:.1f} days**" if pd.notna(proj.get('cumulative_lag_days')) else ""
+                                st.info(f"**~{proj['projected_count']:.1f}** will advance to **'{proj['stage_name']}'**{time_text}", icon="➡️")
+                    st.divider()
 
     st.write("")
 
