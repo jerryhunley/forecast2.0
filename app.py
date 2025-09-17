@@ -67,21 +67,19 @@ with st.sidebar:
     
     st.write("") # Spacer
 
-    # --- NEW: RELIABLE THEME TOGGLE USING st.radio ---
-    def theme_changed():
-        if st.session_state.theme_selector == "Dark":
-            st.session_state.theme = "dark"
-        else:
-            st.session_state.theme = "light"
-
-    theme = st.radio(
+    # --- CORRECTED AND SIMPLIFIED THEME TOGGLE LOGIC ---
+    selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
-        index=0 if st.session_state.theme == "dark" else 1,
-        key="theme_selector",
-        on_change=theme_changed,
+        index=1 if st.session_state.theme == "light" else 0,
+        key="theme_selector", # The key can be the same on all pages
         horizontal=True,
     )
+
+    new_theme_value = "light" if selected_theme == "Light" else "dark"
+    if new_theme_value != st.session_state.theme:
+        st.session_state.theme = new_theme_value
+        st.rerun()
     
     st.header("⚙️ Setup")
     st.info("Start here by uploading your data files. All other pages will become active once data is processed.")
