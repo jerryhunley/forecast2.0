@@ -8,34 +8,19 @@ from datetime import datetime
 from forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
 from calculations import calculate_avg_lag_generic
 from constants import *
-from helpers import load_css
+from helpers import format_performance_df
 
-# --- Theme Initialization and Page Config ---
-if "theme_selector" not in st.session_state:
-    st.session_state.theme_selector = "Dark"
-
+# --- Page Configuration ---
 st.set_page_config(page_title="AI Forecast", page_icon="🤖", layout="wide")
-
-if st.session_state.theme_selector == "Light":
-    load_css("style-light.css")
-else:
-    load_css("style-dark.css")
 
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
-    st.write("") 
-    st.radio(
-        "Theme",
-        ["Dark", "Light"],
-        key="theme_selector",
-        horizontal=True,
-    )
 
 st.title("🤖 AI Forecast (Goal-Based)")
 st.info("""
 Define your recruitment goals. The tool will estimate a monthly plan to meet your Last Patient In (LPI) date.
-Settings for CPQL Inflation and Monthly QL Capacity can be adjusted in the sidebar on the Home page.
+Settings are configured on the Home page sidebar.
 """)
 
 # --- Page Guard ---
@@ -97,7 +82,6 @@ with st.container(border=True):
             key='ai_rolling_window'
         )
     
-    # --- CORRECTED: Use 4 columns for 4 sliders ---
     cr1, cr2, cr3, cr4 = st.columns(4)
     manual_rates = {
         f"{STAGE_PASSED_ONLINE_FORM} -> {STAGE_PRE_SCREENING_ACTIVITIES}": cr1.slider("AI: POF -> PreScreen %", 0.0, 100.0, 90.0, format="%.1f%%", key='ai_cr_qps') / 100.0,
@@ -107,7 +91,6 @@ with st.container(border=True):
     }
 
 with st.expander("Optional Site Configurations"):
-    st.caption("Define when sites are active for QL allocation. Leave blank if always active.")
     site_activity_schedule = {}
     if site_metrics is not None and not site_metrics.empty:
         site_activity_df_data = [{"Site": s, "Activation Date": None, "Deactivation Date": None} for s in site_metrics['Site'].unique()]
@@ -120,6 +103,85 @@ with st.expander("Optional Site Configurations"):
     else:
         st.info("No site data available to configure.")
 
+# --- THIS IS THE RESTORED EXECUTION LOGIC ---
 if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=True):
-    # Calculation and display logic goes here
-    pass
+    with st.spinner("Calculating forecast..."):
+        effective_rates, _ = determine_effective_projection_rates(
+            processed_data, ordered_stages, ts_col_map,
+            rate_method, rolling_window, manual_rates, inter_stage_lags
+        )
+
+        avg_pof_icf_lag = calculate_avg_lag_generic(processed_data, ts_col_map.get(STAGE_PASSED_ONLINE_FORM), ts_col_map.get(STAGE_SIGNED_ICF))
+        if pd.isna(avg_pof_icf_lag): avg_pof_icf_lag = 30.0
+
+        ts_pof_col = ts_col_map.get(STAGE_PASSED_ONLINE_FORM)
+        baseline_ql_volume = 50.0
+        if ts_pof_col and ts_pof_col in processed_data.columns:
+            pof_data = processed_data.dropna(subset=[ts_pof_col])
+            if not pof_data.empty and 'Submission_Month' in pof_data.columns:
+                monthly_counts = pof_data.groupby('Submission_Month').size()
+                if not monthly_counts.empty:
+                    baseline_ql_volume = monthly_counts.nlargest(6).mean()
+        
+        (
+            df_primary, site_df_primary, ads_off_primary,
+            message_primary, is_unfeasible_primary, actual_icfs_primary
+        ) = calculate_ai_forecast_core(
+            goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
+            icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
+            ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
+            site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input={},
+            site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
+            cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
+            run_mode="primary", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+            ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
+            baseline_monthly_ql_volume_override=baseline_ql_volume
+        )
+
+        results_to_show = (df_primary, site_df_primary, ads_off_primary, message_primary, is_unfeasible_primary, actual_icfs_primary)
+
+        if is_unfeasible_primary:
+            st.info("Initial forecast is unfeasible. Running a 'best-case' scenario with an extended LPI date...")
+            (
+                df_best, site_df_best, ads_off_best,
+                message_best, is_unfeasible_best, actual_icfs_best
+            ) = calculate_ai_forecast_core(
+                goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
+                icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
+                ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
+                site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input={},
+                site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
+                cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
+                run_mode="best_case_extended_lpi", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
+                ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
+                baseline_monthly_ql_volume_override=baseline_ql_volume
+            )
+            results_to_show = (df_best, site_df_best, ads_off_best, message_best, is_unfeasible_best, actual_icfs_best)
+
+    st.divider()
+    st.subheader("Forecast Results")
+    
+    df_res, site_df_res, ads_off_res, message_res, is_unfeasible_res, actual_icfs_res = results_to_show
+    
+    if is_unfeasible_res: st.error(f"**Feasibility:** {message_res}")
+    else: st.success(f"**Feasibility:** {message_res}")
+
+    r1, r2, r3 = st.columns(3)
+    with r1, st.container(border=True):
+        st.metric("Target LPI Date (Original Goal)", goal_lpi_date.strftime("%Y-%m-%d"))
+    with r2, st.container(border=True):
+        st.metric("Projected/Goal ICFs", f"{actual_icfs_res:,.0f} / {goal_icf_num:,}")
+    with r3, st.container(border=True):
+        st.metric("Est. Ads Off Date (Generation)", ads_off_res)
+
+    if df_res is not None and not df_res.empty:
+        with st.container(border=True):
+            st.subheader("Forecasted Monthly Performance")
+            df_display = df_res.copy()
+            df_display.rename(columns={'Target_QLs_POF': 'Planned QLs (POF)'}, inplace=True)
+            st.dataframe(df_display, use_container_width=True)
+
+    if site_df_res is not None and not site_df_res.empty:
+        with st.container(border=True):
+            st.subheader("Forecasted Site-Level Performance")
+            st.dataframe(site_df_res, use_container_width=True)

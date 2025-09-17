@@ -6,30 +6,14 @@ from datetime import datetime
 # Direct imports from modules in the root directory
 from forecasting import determine_effective_projection_rates, calculate_pipeline_projection, generate_funnel_narrative
 from constants import *
-from helpers import load_css
+from helpers import format_performance_df # We still need this helper
 
-# --- Theme Initialization and Page Config ---
-if "theme_selector" not in st.session_state:
-    st.session_state.theme_selector = "Dark"
-
+# --- Page Configuration ---
 st.set_page_config(page_title="Funnel Analysis", page_icon="🔬", layout="wide")
-
-# --- Apply CSS from the assets folder ---
-if st.session_state.theme_selector == "Light":
-    load_css("assets/style-light.css")
-else:
-    load_css("assets/style-dark.css")
 
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
-    st.write("") 
-    st.radio(
-        "Theme",
-        ["Dark", "Light"],
-        key="theme_selector",
-        horizontal=True,
-    )
 
 st.title("🔬 Funnel Analysis (Based on Current Pipeline)")
 st.info("""
@@ -105,16 +89,14 @@ if 'funnel_analysis_results' in st.session_state and st.session_state.funnel_ana
     st.caption(f"**Projection Using: {rates_desc} Conversion Rates**")
     
     kpi_col1, kpi_col2 = st.columns(2)
-    with kpi_col1:
-        with st.container(border=True):
-            st.metric("Total Expected ICF Yield from Funnel", f"{results['total_icf_yield']:,.1f}")
-    with kpi_col2:
-        with st.container(border=True):
-            st.metric("Total Expected Enrollment Yield from Funnel", f"{results['total_enroll_yield']:,.1f}")
+    with kpi_col1, st.container(border=True):
+        st.metric("Total Expected ICF Yield from Funnel", f"{results['total_icf_yield']:,.1f}")
+    with kpi_col2, st.container(border=True):
+        st.metric("Total Expected Enrollment Yield from Funnel", f"{results['total_enroll_yield']:,.1f}")
             
     st.write("")
 
-    # --- THIS IS THE MISSING NARRATIVE/BREAKDOWN BLOCK ---
+    # --- THIS IS THE RESTORED NARRATIVE/BREAKDOWN BLOCK ---
     narrative_steps = st.session_state.get('funnel_narrative_data', [])
     if narrative_steps:
         with st.container(border=True):
