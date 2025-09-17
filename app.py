@@ -147,7 +147,6 @@ with st.sidebar:
         st.session_state.ai_ql_vol_threshold = st.slider("QL Volume Increase Threshold (%)", 1.0, 50.0, 10.0, 1.0)
         st.session_state.ai_ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5)
 
-
 st.title("📊 Recruitment Forecasting Tool")
 st.header("Home & Data Setup")
 
