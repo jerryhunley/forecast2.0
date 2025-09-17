@@ -74,19 +74,43 @@ def get_df_info(df):
 
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
+    # This is the final, most robust version of the prompt, using a Chain-of-Thought example.
     prompt_parts = [
-        "You are an expert Python data analyst. Your goal is to write a Python code block to solve a user's request.",
+        "You are an expert Python data analyst. Your goal is to answer a user's question by generating a 'Thought' process and then the `Code` to execute it.",
         "\n--- RESPONSE FORMAT ---",
         "You MUST respond in two parts:",
-        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. **You MUST explicitly state the full, exact column and variable names you will use.**",
+        "1.  **Thought:** A step-by-step thought process explaining your plan. You MUST explicitly state the full, exact column and variable names you will use.",
         "2.  **Code:** A single, executable Python code block that implements your plan.",
+        
+        "\n--- COMPLETE EXAMPLE OF A COMPLEX REQUEST ---",
+        "User Request: \"Show me in a line graph the enrollment trend for each site in the study by week\"",
+        "Thought:",
+        "1.  The user wants a weekly trend of 'enrollments' for each 'site'.",
+        "2.  I must use the raw `df` to get weekly granularity.",
+        "3.  The Golden Rule says analysis of 'enrollments' MUST use the enrollment timestamp, which is `'TS_Enrolled'`.",
+        "4.  I will group by `'Site'` and `pd.Grouper` on the `'TS_Enrolled'` column with a weekly frequency (`freq='W'`).",
+        "5.  Finally, I will use `plotly.express` (as `px`) to create a line chart and display it with `st.plotly_chart()`.",
+        "```python",
+        "import plotly.express as px",
+        "enrollment_col = ts_col_map.get('Enrolled')",
+        "if enrollment_col and enrollment_col in df.columns:",
+        "    weekly_df = df.dropna(subset=[enrollment_col]).copy()",
+        "    weekly_by_site = weekly_df.groupby(['Site', pd.Grouper(key=enrollment_col, freq='W')]).size().reset_index(name='Enrollment Count')",
+        "    fig = px.line(weekly_by_site, x=enrollment_col, y='Enrollment Count', color='Site', title='Weekly Enrollment Trend by Site')",
+        "    st.plotly_chart(fig, use_container_width=True)",
+        "else:",
+        "    print('Enrollment data is not available.')",
+        "```",
+        
         "\n--- AVAILABLE VARIABLES & DATAFRAMES ---",
         "1.  `site_performance_df`: Pre-computed DataFrame with aggregate site metrics.",
         "2.  `utm_performance_df`: Pre-computed DataFrame with aggregate UTM metrics.",
         "3.  `df`: The raw master DataFrame.",
         "4.  `ts_col_map`: Dictionary mapping stage names to timestamp columns.",
+        
         "\n--- CRITICAL CODING RULE ---",
-        "For any time-series grouping (e.g., 'by week' or 'by month'), you MUST use the `pd.Grouper` method. Do not use `.resample()` on a grouped object.",
+        "**Your final output MUST be displayed using a Streamlit function.** For a Matplotlib plot, you MUST end your code with `st.pyplot(plt.gcf())`. **DO NOT use `plt.show()`**. For any other output, use `st.dataframe()` or `print()`.",
+        
         "\n--- DATAFRAME SCHEMAS ---",
         f"**`site_performance_df` Schema:**\n{_site_perf_info}",
         f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
