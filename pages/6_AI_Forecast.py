@@ -8,7 +8,7 @@ from datetime import datetime
 from forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
 from calculations import calculate_avg_lag_generic
 from constants import *
-from helpers import format_performance_df # Keep this for potential future use
+from helpers import format_performance_df
 
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Forecast", page_icon="🤖", layout="wide")
@@ -19,8 +19,7 @@ with st.sidebar:
 
 st.title("🤖 AI Forecast (Goal-Based)")
 st.info("""
-Define your recruitment goals. The tool will estimate a monthly plan to meet your Last Patient In (LPI) date.
-Settings are configured on the Home page sidebar.
+Define your recruitment goals and assumptions below. The tool will estimate a monthly plan to meet your Last Patient In (LPI) date.
 """)
 
 # --- Page Guard ---
@@ -36,18 +35,11 @@ inter_stage_lags = st.session_state.inter_stage_lags
 site_metrics = st.session_state.site_metrics_calculated
 weights = st.session_state.get("weights_normalized", {})
 
-# AI Forecast page needs its own assumption controls, with defaults
-# These are no longer read from the main app's session state.
-icf_variation = 10
-cpql_inflation = 5.0
-ql_vol_threshold = 10.0
-ql_capacity_multiplier = 3.0
-proj_horizon = 12
-
-# --- UI CONTROLS ---
+# --- Page-Specific Controls ---
 with st.container(border=True):
     st.subheader("Define Your Goals & Assumptions")
     
+    # --- Goal Settings ---
     c1, c2, c3 = st.columns(3)
     with c1:
         goal_lpi_date = st.date_input("Target LPI Date", value=datetime.now() + pd.DateOffset(months=12))
@@ -56,8 +48,21 @@ with st.container(border=True):
     with c3:
         base_cpql = st.number_input("Base Estimated CPQL (POF)", min_value=1.0, value=75.0, step=5.0, format="%.2f")
 
-    st.write("") # Spacer
+    st.divider()
     
+    # --- Model Assumption Settings ---
+    st.markdown("##### Global Model Assumptions")
+    a1, a2, a3, a4 = st.columns(4)
+    proj_horizon = a1.number_input("Projection Horizon (Months)", 1, 48, 12)
+    icf_variation = a2.slider("Projected ICF Variation (+/- %)", 0, 50, 10)
+    cpql_inflation = a3.slider("CPQL Inflation Factor (%)", 0.0, 25.0, 5.0, 0.5)
+    ql_vol_threshold = a4.slider("QL Volume Increase Threshold (%)", 1.0, 50.0, 10.0, 1.0)
+    ql_capacity_multiplier = st.slider("Monthly QL Capacity Multiplier", 1.0, 30.0, 3.0, 0.5)
+        
+    st.divider()
+
+    # --- Lag and Rate Assumptions ---
+    st.markdown("##### Lag & Conversion Rate Assumptions")
     lag_method = st.radio(
         "ICF Landing Lag Assumption:",
         ("Use Overall Average POF->ICF Lag", "Use P25/P50/P75 Day Lag Distribution"),
