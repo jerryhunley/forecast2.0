@@ -8,7 +8,7 @@ from datetime import datetime
 from forecasting import determine_effective_projection_rates, calculate_ai_forecast_core
 from calculations import calculate_avg_lag_generic
 from constants import *
-from helpers import format_performance_df
+from helpers import format_performance_df # Keep this for potential future use
 
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Forecast", page_icon="🤖", layout="wide")
@@ -34,14 +34,17 @@ ordered_stages = st.session_state.ordered_stages
 ts_col_map = st.session_state.ts_col_map
 inter_stage_lags = st.session_state.inter_stage_lags
 site_metrics = st.session_state.site_metrics_calculated
-weights = st.session_state.weights_normalized
-icf_variation = st.session_state.shared_icf_variation
-cpql_inflation = st.session_state.ai_cpql_inflation
-ql_vol_threshold = st.session_state.ai_ql_vol_threshold
-ql_capacity_multiplier = st.session_state.ai_ql_capacity_multiplier
-proj_horizon = st.session_state.proj_horizon
+weights = st.session_state.get("weights_normalized", {})
 
-# --- Page-Specific Controls ---
+# AI Forecast page needs its own assumption controls, with defaults
+# These are no longer read from the main app's session state.
+icf_variation = 10
+cpql_inflation = 5.0
+ql_vol_threshold = 10.0
+ql_capacity_multiplier = 3.0
+proj_horizon = 12
+
+# --- UI CONTROLS ---
 with st.container(border=True):
     st.subheader("Define Your Goals & Assumptions")
     
@@ -53,7 +56,7 @@ with st.container(border=True):
     with c3:
         base_cpql = st.number_input("Base Estimated CPQL (POF)", min_value=1.0, value=75.0, step=5.0, format="%.2f")
 
-    st.write("")
+    st.write("") # Spacer
     
     lag_method = st.radio(
         "ICF Landing Lag Assumption:",
@@ -103,7 +106,7 @@ with st.expander("Optional Site Configurations"):
     else:
         st.info("No site data available to configure.")
 
-# --- EXECUTION LOGIC RESTORED ---
+# --- EXECUTION LOGIC ---
 if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=True):
     with st.spinner("Calculating forecast..."):
         effective_rates, _ = determine_effective_projection_rates(
@@ -123,6 +126,7 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
                 if not monthly_counts.empty:
                     baseline_ql_volume = monthly_counts.nlargest(6).mean()
         
+        # Run primary forecast
         (
             df_primary, site_df_primary, ads_off_primary,
             message_primary, is_unfeasible_primary, actual_icfs_primary
@@ -142,6 +146,7 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
 
         if is_unfeasible_primary:
             st.info("Initial forecast is unfeasible. Running a 'best-case' scenario with an extended LPI date...")
+            # Run best-case scenario
             (
                 df_best, site_df_best, ads_off_best,
                 message_best, is_unfeasible_best, actual_icfs_best
