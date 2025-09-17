@@ -6,4 +6,3 @@ google-generativeai
 matplotlib
 altair
 plotly
-streamlit-toggle-switch
