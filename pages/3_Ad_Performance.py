@@ -27,17 +27,20 @@ with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
-    def theme_changed_ad_perf():
-        st.session_state.theme = "light" if st.session_state.theme_selector_ad_perf == "Light" else "dark"
 
-    st.radio(
+    # --- CORRECTED AND SIMPLIFIED THEME TOGGLE LOGIC ---
+    selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
         index=1 if st.session_state.theme == "light" else 0,
-        key="theme_selector_ad_perf",
-        on_change=theme_changed_ad_perf,
+        key="theme_selector", # The key can be the same on all pages
         horizontal=True,
     )
+
+    new_theme_value = "light" if selected_theme == "Light" else "dark"
+    if new_theme_value != st.session_state.theme:
+        st.session_state.theme = new_theme_value
+        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
