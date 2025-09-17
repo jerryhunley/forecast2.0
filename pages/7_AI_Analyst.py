@@ -12,6 +12,8 @@ import re
 import plotly.graph_objects as go
 import plotly.express as px
 import sys
+
+# Direct imports from modules in the root directory
 from constants import *
 from calculations import calculate_grouped_performance_metrics, calculate_avg_lag_generic
 from scoring import score_performance_groups
@@ -20,9 +22,13 @@ from helpers import format_performance_df
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
-# --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
+
+st.title("🤖 Strategic AI Analyst")
+st.info("""
+This advanced AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
+""")
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
@@ -33,7 +39,46 @@ if not st.session_state.get('data_processed_successfully', False):
 df = st.session_state.referral_data_processed
 ts_col_map = st.session_state.ts_col_map
 ordered_stages = st.session_state.ordered_stages
-weights = st.session_state.weights_normalized
+
+# --- THIS IS THE FIX: Create self-sufficient, synced weights on this page ---
+with st.expander("Adjust Performance Scoring Weights"):
+    st.info("These weights are used by the AI when asked to score or rank performance. They are synced with the weights on the performance pages.")
+    
+    # Initialize session state for all weight keys if they don't exist
+    weight_defaults = {
+        'w_qual_to_enroll': 10, 'w_icf_to_enroll': 10, 'w_qual_to_icf': 20, 'w_avg_ttc': 10,
+        'w_site_sf': 5, 'w_sts_appt': 15, 'w_appt_icf': 15, 'w_lag_q_icf': 5,
+        'w_generic_sf': 5, 'w_proj_lag': 0
+    }
+    for key, value in weight_defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+    # Create sliders that read from and write to the same session state keys
+    st.session_state.w_qual_to_enroll = st.slider("Qual (POF) -> Enrollment %", 0, 100, st.session_state.w_qual_to_enroll, key="w_q_enr_ai")
+    st.session_state.w_icf_to_enroll = st.slider("ICF -> Enrollment %", 0, 100, st.session_state.w_icf_to_enroll, key="w_icf_enr_ai")
+    st.session_state.w_qual_to_icf = st.slider("Qual (POF) -> ICF %", 0, 100, st.session_state.w_qual_to_icf, key="w_q_icf_ai")
+    st.session_state.w_avg_ttc = st.slider("Avg Time to Contact (Sites)", 0, 100, st.session_state.w_avg_ttc, help="Lower is better.", key="w_ttc_ai")
+    st.session_state.w_site_sf = st.slider("Site Screen Fail %", 0, 100, st.session_state.w_site_sf, help="Lower is better.", key="w_ssf_ai")
+    st.session_state.w_sts_appt = st.slider("StS -> Appt Sched %", 0, 100, st.session_state.w_sts_appt, key="w_sts_appt_ai")
+    st.session_state.w_appt_icf = st.slider("Appt Sched -> ICF %", 0, 100, st.session_state.w_appt_icf, key="w_appt_icf_ai")
+    st.session_state.w_lag_q_icf = st.slider("Lag Qual -> ICF (Days)", 0, 100, st.session_state.w_lag_q_icf, help="Lower is better.", key="w_lag_ai")
+    st.session_state.w_generic_sf = st.slider("Generic Screen Fail % (Ads)", 0, 100, st.session_state.w_generic_sf, help="Lower is better.", key="w_gsf_ai")
+    st.session_state.w_proj_lag = st.slider("Generic Projection Lag (Ads)", 0, 100, st.session_state.w_proj_lag, help="Lower is better.", key="w_gpl_ai")
+
+weights = {
+    "Qual to Enrollment %": st.session_state.w_qual_to_enroll,
+    "ICF to Enrollment %": st.session_state.w_icf_to_enroll,
+    "Qual -> ICF %": st.session_state.w_qual_to_icf,
+    "Avg TTC (Days)": st.session_state.w_avg_ttc,
+    "Site Screen Fail %": st.session_state.w_site_sf,
+    "StS -> Appt %": st.session_state.w_sts_appt,
+    "Appt -> ICF %": st.session_state.w_appt_icf,
+    "Lag Qual -> ICF (Days)": st.session_state.w_lag_q_icf,
+    "Screen Fail % (from ICF)": st.session_state.w_generic_sf,
+    "Projection Lag (Days)": st.session_state.w_proj_lag,
+}
+# --- END OF FIX ---
 
 # --- Configure the Gemini API ---
 try:
@@ -45,48 +90,28 @@ except Exception as e:
     st.exception(e)
     st.stop()
 
-# --- System Prompts ---
+# --- System Prompts for the Advanced Agent ---
+@st.cache_data
+def get_df_info(df):
+    buffer = StringIO()
+    df.info(buf=buffer)
+    return buffer.getvalue()
+
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
-    # This is the final, most robust version of the prompt, using a perfect Chain-of-Thought example.
     prompt_parts = [
-        "You are an expert Python data analyst. Your goal is to answer a user's question by generating a 'Thought' process and then the `Code` to execute it.",
+        "You are an expert Python data analyst. Your goal is to write a Python code block to solve a user's request.",
         "\n--- RESPONSE FORMAT ---",
         "You MUST respond in two parts:",
-        "1.  **Thought:** A brief, step-by-step thought process explaining your plan. You MUST explicitly state the full, exact column and variable names you will use.",
+        "1.  **Thought:** A brief, step-by-step thought process explaining which tool you will use and why. **You MUST explicitly state the full, exact column and variable names you will use.**",
         "2.  **Code:** A single, executable Python code block that implements your plan.",
-        
-        "\n--- COMPLETE EXAMPLE OF A COMPLEX REQUEST ---",
-        "User Request: \"Show me in a line graph the enrollment trend for each site in the study by week\"",
-        "Thought:",
-        "1.  The user wants a weekly trend of 'enrollments' for each 'site'.",
-        "2.  I have two main tools: the pre-computed `site_performance_df` and the raw `df`.",
-        "3.  I will first check the schema of `site_performance_df`. It contains total 'Enrollment Count' per site, but it does NOT have weekly data. Therefore, it is not suitable for this request.",
-        "4.  I must fall back to using the raw `df` to get the necessary weekly granularity.",
-        "5.  The Golden Rule states that analysis of 'enrollments' MUST use the enrollment timestamp. I will use the `ts_col_map` to find the correct column name, which is `'TS_Enrolled'`.",
-        "6.  My plan is to group the raw `df` by 'Site' and then use `pd.Grouper` on the `'TS_Enrolled'` column with a weekly frequency (`freq='W'`) to get the counts.",
-        "7.  Finally, I will use `plotly.express` (as `px`) to create a line chart of the results, with each site as a different color.",
-        "```python",
-        "import plotly.express as px",
-        "enrollment_col = ts_col_map.get('Enrolled')",
-        "if enrollment_col and enrollment_col in df.columns:",
-        "    weekly_df = df.dropna(subset=[enrollment_col]).copy()",
-        "    weekly_by_site = weekly_df.groupby(['Site', pd.Grouper(key=enrollment_col, freq='W')]).size().reset_index(name='Enrollment Count')",
-        "    fig = px.line(weekly_by_site, x=enrollment_col, y='Enrollment Count', color='Site', title='Weekly Enrollment Trend by Site')",
-        "    st.plotly_chart(fig, use_container_width=True)",
-        "else:",
-        "    print('Enrollment data is not available.')",
-        "```",
-        
         "\n--- AVAILABLE VARIABLES & DATAFRAMES ---",
         "1.  `site_performance_df`: Pre-computed DataFrame with aggregate site metrics.",
         "2.  `utm_performance_df`: Pre-computed DataFrame with aggregate UTM metrics.",
         "3.  `df`: The raw master DataFrame.",
         "4.  `ts_col_map`: Dictionary mapping stage names to timestamp columns.",
-        
         "\n--- CRITICAL CODING RULE ---",
-        "For any time-series grouping (e.g., 'by week' or 'by month'), you MUST use the `pd.Grouper` method as shown in the example above. Do not use `.resample()` on a grouped object.",
-        
+        "For any time-series grouping (e.g., 'by week' or 'by month'), you MUST use the `pd.Grouper` method. Do not use `.resample()` on a grouped object.",
         "\n--- DATAFRAME SCHEMAS ---",
         f"**`site_performance_df` Schema:**\n{_site_perf_info}",
         f"\n**`utm_performance_df` Schema:**\n{_utm_perf_info}",
@@ -97,26 +122,18 @@ def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info)
 
 @st.cache_data
 def get_synthesizer_prompt():
-    return """You are an expert business analyst and senior strategist for a clinical trial company.
+    return """You are an expert business analyst and senior strategist.
 Your goal is to provide a single, cohesive, and insightful executive summary based on a series of data analyses.
-You will be given the user's original complex question, the AI's thought process, the Python code executed, and the raw data result from that code.
-- **Start with a bolded headline** that directly answers the user's core question.
-- **Weave the results into a narrative.**
-- **Connect the data to business goals** like speed, efficiency, or performance.
-- **Conclude with a clear recommendation** or key takeaway.
+You will be given the user's question, the AI's thought process, the code executed, and the raw data result.
+- Start with a bolded headline that answers the user's core question.
+- Weave the results into a narrative.
+- Connect the data to business goals like speed, efficiency, or performance.
+- Conclude with a clear recommendation or key takeaway.
 """
-
-@st.cache_data
-def get_df_info(df):
-    buffer = StringIO()
-    df.info(buf=buffer)
-    return buffer.getvalue()
 
 # --- Main Chat Logic ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "agent_run" not in st.session_state:
-    st.session_state.agent_run = {"running": False}
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -124,15 +141,9 @@ for message in st.session_state.messages:
 
 if user_prompt := st.chat_input("Ask a question about your data..."):
     st.session_state.messages.append({"role": "user", "content": user_prompt})
-    st.session_state.agent_run = {
-        "running": True,
-        "summary": None,
-    }
-    st.rerun()
+    with st.chat_message("user"):
+        st.markdown(user_prompt)
 
-if st.session_state.agent_run and st.session_state.agent_run["running"]:
-    user_prompt = st.session_state.messages[-1]["content"]
-    
     with st.chat_message("assistant"):
         with st.spinner("Pre-calculating business reports and forming a plan..."):
             site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
@@ -165,7 +176,7 @@ if st.session_state.agent_run and st.session_state.agent_run["running"]:
 
         with st.spinner("Executing code..."):
             st.markdown("**Execution Result:**")
-            result_display_area = st.container(border=True) # Give the result a card
+            result_display_area = st.container()
             result_output_str = ""
             try:
                 execution_globals = {
@@ -190,12 +201,13 @@ if st.session_state.agent_run and st.session_state.agent_run["running"]:
                 st.stop()
 
         with st.spinner("Synthesizing final summary..."):
-            synthesis_context = (
-                f"**User's Question:** {user_prompt}\n\n"
-                f"**AI's Thought Process:** {thought}\n\n"
-                f"**Executed Code:**\n```python\n{code_response}\n```\n\n"
-                f"**Raw Result:**\n{result_output_str if result_output_str else 'A plot was generated.'}"
-            )
+            synthesis_context_parts = [
+                "**User's Question:**", user_prompt, "\n\n",
+                "**AI's Thought Process:**", thought, "\n\n",
+                "**Executed Code:**", f"```python\n{code_response}\n```\n\n",
+                "**Raw Result:**", result_output_str if result_output_str else "A plot was successfully generated."
+            ]
+            synthesis_context = "".join(synthesis_context_parts)
             
             synthesizer_prompt = get_synthesizer_prompt()
             full_synthesizer_prompt = f"{synthesizer_prompt}\n\n--- ANALYSIS DETAILS ---\n{synthesis_context}\n\n--- EXECUTIVE SUMMARY ---"
@@ -209,4 +221,3 @@ if st.session_state.agent_run and st.session_state.agent_run["running"]:
         st.markdown("--- \n ## Executive Summary")
         st.markdown(summary_text)
         st.session_state.messages.append({"role": "assistant", "content": f"**Executive Summary:**\n{summary_text}"})
-        st.session_state.agent_run["running"] = False
