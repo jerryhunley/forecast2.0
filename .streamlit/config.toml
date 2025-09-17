@@ -1,19 +1,4 @@
 # .streamlit/config.toml
 
-# This sets the default theme to be our custom 'dark' theme.
-[theme]
-base = "dark"
-primaryColor = "#53CA97" # Mint
-backgroundColor = "#1B2222" # Eerie Black
-secondaryBackgroundColor = "#293434"
-textColor = "#F8F8F8"
-font = "sans serif"
-
-# This defines our custom light theme.
-[theme.light]
-base = "light"
-primaryColor = "#53CA97" # Mint
-backgroundColor = "#F8F8F8" # Seasalt (Light Gray)
-secondaryBackgroundColor = "#1B2222" # Eerie Black (for the dark sidebar)
-textColor = "#1B2222" # Eerie Black
-font = "sans serif"
+# We will define all colors in CSS.
+# This file can be used for other configurations in the future.
