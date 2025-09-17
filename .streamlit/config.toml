@@ -1,1 +1,23 @@
-# All theme and font settings are controlled by CSS files.
+# .streamlit/config.toml
+
+# This command tells Streamlit to use this theme configuration.
+[theme]
+
+# This sets the default theme to be our custom dark theme.
+base = "dark"
+primaryColor = "#53CA97"      # Mint Green
+backgroundColor = "#1B2222"  # Eerie Black
+secondaryBackgroundColor = "#293434" # Darker Shade
+textColor = "#F8F8F8"          # Seasalt
+font = "sans serif"
+
+# We create a secondary theme that can be selected in code.
+# However, for full reliability, we will control the switch with CSS.
+# This section is kept for potential future use with Streamlit's native toggle if it becomes more robust.
+[theme.light]
+base = "light"
+primaryColor = "#53CA97"      # Mint Green
+backgroundColor = "#F8F8F8"  # Seasalt (Light Gray)
+secondaryBackgroundColor = "#1B2222" # Eerie Black (for the dark sidebar)
+textColor = "#1B2222"          # Eerie Black
+font = "sans serif"
