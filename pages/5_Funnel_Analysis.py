@@ -21,12 +21,28 @@ else:
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     st.write("") 
-    st.radio(
+
+    # Determine the index for the radio button based on the current theme
+    # Default to 0 (Dark) if the theme is not set
+    current_theme = st.session_state.get("theme_selector", "Dark")
+    current_index = 0 if current_theme == "Dark" else 1
+
+    # Create the radio button
+    selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
-        key="theme_selector",
+        index=current_index,
+        key="theme_selector_widget", # Use a unique key for the widget itself
         horizontal=True,
     )
+
+    # The core logic for theme switching
+    # Check if the user's selection is different from what's stored in session state
+    if selected_theme != st.session_state.get("theme_selector"):
+        # If it is, update the session state
+        st.session_state.theme_selector = selected_theme
+        # And inject JavaScript to force a full page reload
+        st.html("<script>parent.location.reload()</script>")
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
