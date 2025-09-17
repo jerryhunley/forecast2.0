@@ -1,24 +1,43 @@
 # pages/2_Site_Performance.py
 import streamlit as st
+from streamlit_toggle_switch import st_toggle_switch
 import pandas as pd
 
 # Direct imports from modules in the root directory
 from scoring import score_sites
-from helpers import format_performance_df
+from helpers import format_performance_df, load_css
 
-# --- Function to Inject CSS ---
-def local_css(file_name):
-    try:
-        with open(file_name) as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    except FileNotFoundError:
-        st.warning(f"CSS file '{file_name}' not found. Please make sure it is in the root directory.")
+# --- Theme Initialization ---
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
 
 # --- Page Configuration ---
 st.set_page_config(page_title="Site Performance", page_icon="🏆", layout="wide")
-local_css("style.css") # Apply the custom CSS
+
+# --- Apply the correct CSS file based on the theme in session state ---
+if st.session_state.theme == "light":
+    load_css("style-light.css")
+else:
+    load_css("style-dark.css")
 
 st.title("🏆 Site Performance Dashboard")
+
+# --- Sidebar ---
+with st.sidebar:
+    st.logo("assets/logo.png", link="https://1nhealth.com")
+    
+    st.write("") # Spacer
+    current_theme_is_light = (st.session_state.theme == "light")
+    
+    toggled = st_toggle_switch(
+        label="Light Mode",
+        key="theme_switch_site_perf", # Unique key
+        default_value=current_theme_is_light,
+    )
+    
+    if toggled != current_theme_is_light:
+        st.session_state.theme = "light" if toggled else "dark"
+        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
@@ -32,15 +51,12 @@ weights = st.session_state.weights_normalized
 if site_metrics is not None and not site_metrics.empty and weights:
     ranked_sites_df = score_sites(site_metrics, weights)
 
-    # --- NEW: Defensive KPI Card Calculations ---
     st.subheader("Key Performance Indicators (Overall)")
     
-    # Check for the existence of each column before trying to sum it.
     total_qualified = ranked_sites_df['Total Qualified'].sum() if 'Total Qualified' in ranked_sites_df else 0
     total_enrollments = ranked_sites_df['Enrollment Count'].sum() if 'Enrollment Count' in ranked_sites_df else 0
     total_icfs = ranked_sites_df['ICF Count'].sum() if 'ICF Count' in ranked_sites_df else 0
     
-    # Calculate rate safely
     overall_qual_to_icf_rate = (total_icfs / total_qualified) * 100 if total_qualified > 0 else 0
 
     kpi_cols = st.columns(3)
@@ -56,7 +72,6 @@ if site_metrics is not None and not site_metrics.empty and weights:
             
     st.divider()
 
-    # --- Main Data Table ---
     with st.container(border=True):
         st.subheader("Site Performance Ranking")
         
@@ -78,6 +93,5 @@ if site_metrics is not None and not site_metrics.empty and weights:
                 st.warning("Could not generate the site ranking table.")
         else:
             st.warning("None of the standard display columns were found.")
-
 else:
     st.warning("Site metrics have not been calculated. This may be due to an error or a missing 'Site' column in your data.")

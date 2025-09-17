@@ -1,5 +1,6 @@
 # pages/7_AI_Analyst.py
 import streamlit as st
+from streamlit_toggle_switch import st_toggle_switch
 import pandas as pd
 import numpy as np
 import google.generativeai as genai
@@ -17,15 +18,42 @@ import sys
 from constants import *
 from calculations import calculate_grouped_performance_metrics, calculate_avg_lag_generic
 from scoring import score_performance_groups
-from helpers import format_performance_df
+from helpers import format_performance_df, load_css
+
+# --- Theme Initialization ---
+if "theme" not in st.session_state:
+    st.session_state.theme = "dark"
 
 # --- Page Configuration ---
 st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
 
+# --- Apply the correct CSS file based on the theme in session state ---
+if st.session_state.theme == "light":
+    load_css("style-light.css")
+else:
+    load_css("style-dark.css")
+
 st.title("🤖 Strategic AI Analyst")
 st.info("""
-This AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
+This advanced AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
 """)
+
+# --- Sidebar ---
+with st.sidebar:
+    st.logo("assets/logo.png", link="https://1nhealth.com")
+    
+    st.write("") # Spacer
+    current_theme_is_light = (st.session_state.theme == "light")
+    
+    toggled = st_toggle_switch(
+        label="Light Mode",
+        key="theme_switch_ai_analyst", # Unique key
+        default_value=current_theme_is_light,
+    )
+    
+    if toggled != current_theme_is_light:
+        st.session_state.theme = "light" if toggled else "dark"
+        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
@@ -63,11 +91,12 @@ def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info)
         "User Request: \"Show me in a line graph the enrollment trend for each site in the study by week\"",
         "Thought:",
         "1.  The user wants a weekly trend of 'enrollments' for each 'site'.",
-        "2.  I need to use the raw `df` to get weekly granularity.",
-        "3.  The Golden Rule says I must use the enrollment timestamp. `ts_col_map` shows the column is `'TS_Enrolled'`.",
-        "4.  I will filter out rows where `'TS_Enrolled'` is null.",
-        "5.  I will then group by `'Site'` and `pd.Grouper` on the `'TS_Enrolled'` column with a weekly frequency (`freq='W'`) to get the counts.",
-        "6.  Finally, I will use `plotly.express` (as `px`) to create a line chart of the results.",
+        "2.  I have two main tools: the pre-computed `site_performance_df` and the raw `df`.",
+        "3.  I will first check the schema of `site_performance_df`. It contains total 'Enrollment Count' per site, but it does NOT have weekly data. Therefore, it is not suitable for this request.",
+        "4.  I must fall back to using the raw `df` to get the necessary weekly granularity.",
+        "5.  The Golden Rule states that analysis of 'enrollments' MUST use the enrollment timestamp. I will use the `ts_col_map` to find the correct column name, which is `'TS_Enrolled'`.",
+        "6.  My plan is to group the raw `df` by 'Site' and then use `pd.Grouper` on the `'TS_Enrolled'` column with a weekly frequency (`freq='W'`) to get the counts.",
+        "7.  Finally, I will use `plotly.express` (as `px`) to create a line chart of the results, with each site as a different color.",
         "```python",
         "import plotly.express as px",
         "enrollment_col = ts_col_map.get('Enrolled')",
@@ -117,6 +146,8 @@ def get_df_info(df):
 # --- Main Chat Logic ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "agent_run" not in st.session_state:
+    st.session_state.agent_run = {"running": False}
 
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -124,9 +155,15 @@ for message in st.session_state.messages:
 
 if user_prompt := st.chat_input("Ask a question about your data..."):
     st.session_state.messages.append({"role": "user", "content": user_prompt})
-    with st.chat_message("user"):
-        st.markdown(user_prompt)
+    st.session_state.agent_run = {
+        "running": True,
+        "summary": None,
+    }
+    st.rerun()
 
+if st.session_state.agent_run and st.session_state.agent_run["running"]:
+    user_prompt = st.session_state.messages[-1]["content"]
+    
     with st.chat_message("assistant"):
         with st.spinner("Pre-calculating business reports and forming a plan..."):
             site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
@@ -159,7 +196,7 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
 
         with st.spinner("Executing code..."):
             st.markdown("**Execution Result:**")
-            result_display_area = st.container()
+            result_display_area = st.container(border=True) # Give the result a card
             result_output_str = ""
             try:
                 execution_globals = {
@@ -184,13 +221,12 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
                 st.stop()
 
         with st.spinner("Synthesizing final summary..."):
-            synthesis_context_parts = [
-                "**User's Question:**", user_prompt, "\n\n",
-                "**AI's Thought Process:**", thought, "\n\n",
-                "**Executed Code:**", f"```python\n{code_response}\n```\n\n",
-                "**Raw Result:**", result_output_str if result_output_str else "A plot was successfully generated."
-            ]
-            synthesis_context = "".join(synthesis_context_parts)
+            synthesis_context = (
+                f"**User's Question:** {user_prompt}\n\n"
+                f"**AI's Thought Process:** {thought}\n\n"
+                f"**Executed Code:**\n```python\n{code_response}\n```\n\n"
+                f"**Raw Result:**\n{result_output_str if result_output_str else 'A plot was generated.'}"
+            )
             
             synthesizer_prompt = get_synthesizer_prompt()
             full_synthesizer_prompt = f"{synthesizer_prompt}\n\n--- ANALYSIS DETAILS ---\n{synthesis_context}\n\n--- EXECUTIVE SUMMARY ---"
@@ -204,3 +240,4 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
         st.markdown("--- \n ## Executive Summary")
         st.markdown(summary_text)
         st.session_state.messages.append({"role": "assistant", "content": f"**Executive Summary:**\n{summary_text}"})
+        st.session_state.agent_run["running"] = False
