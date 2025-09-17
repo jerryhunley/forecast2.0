@@ -10,7 +10,7 @@ from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
 from constants import *
-from helpers import format_performance_df # helpers.py no longer needs load_css
+from helpers import format_performance_df
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -20,10 +20,11 @@ st.set_page_config(
 )
 
 # --- Session State Initialization for App Data ---
+# This is now lean and only contains what is truly global.
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
-    'weights_normalized', 'historical_spend_df', 'ad_spend_input_dict'
+    'historical_spend_df', 'ad_spend_input_dict'
 ]
 default_values = {
     'data_processed_successfully': False,
@@ -121,8 +122,8 @@ else:
         st.markdown("""
             This application helps you analyze historical recruitment data to forecast future performance. To get started:
 
-            1.  **Confirm No PII**: Check the box in the sidebar to confirm your files are free of Personally Identifiable Information.
-            2.  **Upload Your Data**: Use the file uploaders in the sidebar to provide your referral data and funnel definition files.
-            3.  **Process Data**: Click the "Process Uploaded Data" button that will appear above.
-            4.  **Explore**: Once processing is complete, the analysis pages will become available in the sidebar.
+            1.  **Confirm No PII**: Check the box in the sidebar.
+            2.  **Upload Your Data**: Use the file uploaders in the sidebar.
+            3.  **Process Data**: Click the "Process Uploaded Data" button.
+            4.  **Explore**: Navigate to the analysis pages.
         """)
