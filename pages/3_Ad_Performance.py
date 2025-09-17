@@ -1,9 +1,7 @@
 # pages/3_Ad_Performance.py
 import streamlit as st
-from streamlit_toggle_switch import st_toggle_switch
 import pandas as pd
 
-# Direct imports from modules in the root directory
 from calculations import calculate_grouped_performance_metrics
 from scoring import score_performance_groups
 from helpers import format_performance_df, load_css
@@ -13,13 +11,9 @@ if "theme" not in st.session_state:
     st.session_state.theme = "dark"
 
 # --- Page Configuration ---
-st.set_page_config(
-    page_title="Ad Performance",
-    page_icon="📢",
-    layout="wide"
-)
+st.set_page_config(page_title="Ad Performance", page_icon="📢", layout="wide")
 
-# --- Apply the correct CSS file based on the theme in session state ---
+# --- Apply CSS ---
 if st.session_state.theme == "light":
     load_css("style-light.css")
 else:
@@ -33,17 +27,17 @@ with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
-    current_theme_is_light = (st.session_state.theme == "light")
-    
-    toggled = st_toggle_switch(
-        label="Light Mode",
-        key="theme_switch_ad_perf", # Unique key
-        default_value=current_theme_is_light,
+    def theme_changed_ad_perf():
+        st.session_state.theme = "light" if st.session_state.theme_selector_ad_perf == "Light" else "dark"
+
+    st.radio(
+        "Theme",
+        ["Dark", "Light"],
+        index=1 if st.session_state.theme == "light" else 0,
+        key="theme_selector_ad_perf",
+        on_change=theme_changed_ad_perf,
+        horizontal=True,
     )
-    
-    if toggled != current_theme_is_light:
-        st.session_state.theme = "light" if toggled else "dark"
-        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
@@ -56,9 +50,8 @@ ordered_stages = st.session_state.ordered_stages
 ts_col_map = st.session_state.ts_col_map
 weights = st.session_state.weights_normalized
 
-# Check for UTM Columns
 if "UTM Source" not in processed_data.columns:
-    st.warning("The 'UTM Source' column was not found in the uploaded data. Ad Performance cannot be calculated.")
+    st.warning("The 'UTM Source' column was not found. Ad Performance cannot be calculated.")
     st.stop()
 
 # === Performance by UTM Source ===

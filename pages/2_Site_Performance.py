@@ -1,6 +1,5 @@
 # pages/2_Site_Performance.py
 import streamlit as st
-from streamlit_toggle_switch import st_toggle_switch
 import pandas as pd
 
 # Direct imports from modules in the root directory
@@ -27,17 +26,17 @@ with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
-    current_theme_is_light = (st.session_state.theme == "light")
-    
-    toggled = st_toggle_switch(
-        label="Light Mode",
-        key="theme_switch_site_perf", # Unique key
-        default_value=current_theme_is_light,
+    def theme_changed_site_perf():
+        st.session_state.theme = "light" if st.session_state.theme_selector_site_perf == "Light" else "dark"
+
+    st.radio(
+        "Theme",
+        ["Dark", "Light"],
+        index=1 if st.session_state.theme == "light" else 0,
+        key="theme_selector_site_perf",
+        on_change=theme_changed_site_perf,
+        horizontal=True,
     )
-    
-    if toggled != current_theme_is_light:
-        st.session_state.theme = "light" if toggled else "dark"
-        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
@@ -94,4 +93,4 @@ if site_metrics is not None and not site_metrics.empty and weights:
         else:
             st.warning("None of the standard display columns were found.")
 else:
-    st.warning("Site metrics have not been calculated. This may be due to an error or a missing 'Site' column in your data.")
+    st.warning("Site metrics have not been calculated.")

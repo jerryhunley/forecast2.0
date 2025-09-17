@@ -1,10 +1,8 @@
 # pages/4_Projections.py
 import streamlit as st
-from streamlit_toggle_switch import st_toggle_switch
 import pandas as pd
 import numpy as np
 
-# Direct imports from modules in the root directory
 from forecasting import determine_effective_projection_rates, calculate_projections
 from constants import *
 from helpers import load_css
@@ -14,37 +12,33 @@ if "theme" not in st.session_state:
     st.session_state.theme = "dark"
 
 # --- Page Configuration ---
-st.set_page_config(
-    page_title="Projections",
-    page_icon="📈",
-    layout="wide"
-)
+st.set_page_config(page_title="Projections", page_icon="📈", layout="wide")
 
-# --- Apply the correct CSS file based on the theme in session state ---
+# --- Apply CSS ---
 if st.session_state.theme == "light":
     load_css("style-light.css")
 else:
     load_css("style-dark.css")
 
 st.title("📈 Projections Dashboard")
-st.info("This dashboard forecasts future performance based on the planned ad spend and conversion rate assumptions you configure in the sidebar on the Home page.")
+st.info("This dashboard forecasts future performance based on assumptions configured in the sidebar on the Home page.")
 
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
-    current_theme_is_light = (st.session_state.theme == "light")
-    
-    toggled = st_toggle_switch(
-        label="Light Mode",
-        key="theme_switch_projections", # Unique key
-        default_value=current_theme_is_light,
+    def theme_changed_projections():
+        st.session_state.theme = "light" if st.session_state.theme_selector_projections == "Light" else "dark"
+
+    st.radio(
+        "Theme",
+        ["Dark", "Light"],
+        index=1 if st.session_state.theme == "light" else 0,
+        key="theme_selector_projections",
+        on_change=theme_changed_projections,
+        horizontal=True,
     )
-    
-    if toggled != current_theme_is_light:
-        st.session_state.theme = "light" if toggled else "dark"
-        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
