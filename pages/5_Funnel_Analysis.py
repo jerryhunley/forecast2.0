@@ -20,24 +20,18 @@ if st.session_state.theme == "light":
 else:
     load_css("style-dark.css")
 
-st.title("🔬 Funnel Analysis (Based on Current Pipeline)")
-st.info("""
-This forecast shows the expected outcomes (**ICFs & Enrollments**) from the leads **already in your funnel**.
-It answers the question: "If we stopped all new recruitment activities today, what results would we still see and when?"
-""")
-
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
 
-    # --- CORRECTED AND SIMPLIFIED THEME TOGGLE LOGIC ---
     selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
-        index=1 if st.session_state.theme == "light" else 0,
-        key="theme_selector", # The key can be the same on all pages
+        captions=["", ""],
+        index=0 if st.session_state.theme == "dark" else 1,
+        key="theme_selector",
         horizontal=True,
     )
 

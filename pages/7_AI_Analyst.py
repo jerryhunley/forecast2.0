@@ -32,23 +32,18 @@ if st.session_state.theme == "light":
 else:
     load_css("style-dark.css")
 
-st.title("🤖 Strategic AI Analyst")
-st.info("""
-This advanced AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It will always prefer to use the trusted, pre-calculated data when possible.
-""")
-
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
 
-    # --- CORRECTED AND SIMPLIFIED THEME TOGGLE LOGIC ---
     selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
-        index=1 if st.session_state.theme == "light" else 0,
-        key="theme_selector", # The key can be the same on all pages
+        captions=["", ""],
+        index=0 if st.session_state.theme == "dark" else 1,
+        key="theme_selector",
         horizontal=True,
     )
 

@@ -22,24 +22,18 @@ if st.session_state.theme == "light":
 else:
     load_css("style-dark.css")
 
-st.title("🤖 AI Forecast (Goal-Based)")
-st.info("""
-Define your recruitment goals. The tool will estimate a monthly plan to meet your Last Patient In (LPI) date.
-Settings for CPQL Inflation and Monthly QL Capacity can be adjusted in the sidebar on the Home page.
-""")
-
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
     
     st.write("") # Spacer
 
-    # --- CORRECTED AND SIMPLIFIED THEME TOGGLE LOGIC ---
     selected_theme = st.radio(
         "Theme",
         ["Dark", "Light"],
-        index=1 if st.session_state.theme == "light" else 0,
-        key="theme_selector", # The key can be the same on all pages
+        captions=["", ""],
+        index=0 if st.session_state.theme == "dark" else 1,
+        key="theme_selector",
         horizontal=True,
     )
 
