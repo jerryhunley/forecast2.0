@@ -10,7 +10,7 @@ from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
 from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
 from constants import *
-from helpers import format_performance_df
+from helpers import format_performance_df # helpers.py no longer needs load_css
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # --- Session State Initialization for App Data ---
-# This is now lean and only contains what is truly global.
+# This block is crucial and must run before the sidebar widgets are created.
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
     'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
@@ -56,7 +56,15 @@ with st.sidebar:
     st.divider()
 
     with st.expander("Historical Ad Spend"):
-        edited_df = st.data_editor(st.session_state.historical_spend_df, num_rows="dynamic", key="hist_spend_editor")
+        edited_df = st.data_editor(
+            st.session_state.historical_spend_df,
+            num_rows="dynamic",
+            key="hist_spend_editor",
+            column_config={
+                "Month (YYYY-MM)": st.column_config.TextColumn(help="YYYY-MM format", required=True),
+                "Historical Spend": st.column_config.NumberColumn(format="$%.2f", required=True)
+            }
+        )
         temp_spend_dict = {}
         valid_entries = True
         for _, row in edited_df.iterrows():
@@ -122,8 +130,8 @@ else:
         st.markdown("""
             This application helps you analyze historical recruitment data to forecast future performance. To get started:
 
-            1.  **Confirm No PII**: Check the box in the sidebar.
-            2.  **Upload Your Data**: Use the file uploaders in the sidebar.
-            3.  **Process Data**: Click the "Process Uploaded Data" button.
-            4.  **Explore**: Navigate to the analysis pages.
+            1.  **Confirm No PII**: Check the box in the sidebar to confirm your files are free of Personally Identifiable Information.
+            2.  **Upload Your Data**: Use the file uploaders in the sidebar to provide your referral data and funnel definition files.
+            3.  **Process Data**: Click the "Process Uploaded Data" button that will appear above.
+            4.  **Explore**: Once processing is complete, the analysis pages will become available in the sidebar.
         """)
