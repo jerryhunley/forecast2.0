@@ -15,43 +15,14 @@ import sys
 from constants import *
 from calculations import calculate_grouped_performance_metrics, calculate_avg_lag_generic
 from scoring import score_performance_groups
-from helpers import format_performance_df, load_css
+from helpers import format_performance_df
 
-# --- Set a unique key for this page's widgets ---
-st.session_state.page_key = "ai_analyst"
-
-# --- Theme Initialization and Page Config ---
-if "theme_selector" not in st.session_state:
-    st.session_state.theme_selector = "Dark"
-
+# --- Page Configuration ---
 st.set_page_config(page_title="AI Analyst", page_icon="🤖", layout="wide")
-
-if st.session_state.theme_selector == "Light":
-    load_css("style-light.css")
-else:
-    load_css("style-dark.css")
 
 # --- Sidebar ---
 with st.sidebar:
     st.logo("assets/logo.png", link="https://1nhealth.com")
-    st.write("") 
-
-    # Determine the current index based on session state
-    current_index = 1 if st.session_state.get("theme_selector") == "Light" else 0
-
-    # Create the radio button
-    selected_theme = st.radio(
-        "Theme",
-        ["Dark", "Light"],
-        index=current_index,
-        key=f"theme_selector_{st.session_state.page_key}", # Unique key per page
-        horizontal=True,
-    )
-
-    # If the user's selection has changed, update the state and rerun
-    if selected_theme != st.session_state.get("theme_selector"):
-        st.session_state.theme_selector = selected_theme
-        st.rerun()
 
 # --- Page Guard ---
 if not st.session_state.get('data_processed_successfully', False):
