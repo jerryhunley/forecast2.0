@@ -13,10 +13,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import sys
 
-# Direct imports from modules in the root directory
 from constants import *
-from calculations import calculate_grouped_performance_metrics, calculate_avg_lag_generic
-from scoring import score_performance_groups
 from helpers import format_performance_df
 
 # --- Page Configuration ---
@@ -27,7 +24,7 @@ with st.sidebar:
 
 st.title("🤖 Strategic AI Analyst")
 st.info("""
-This AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It uses the global scoring weights set on the performance pages.
+This AI Analyst reasons like a human analyst. It has access to the app's pre-calculated reports (like Site Performance) and can write custom code for novel questions. It uses the global scoring weights set on the **Site Performance** page.
 """)
 
 # --- Page Guard ---
@@ -39,27 +36,30 @@ if not st.session_state.get('data_processed_successfully', False):
 df = st.session_state.referral_data_processed
 ts_col_map = st.session_state.ts_col_map
 ordered_stages = st.session_state.ordered_stages
+status_history_col = "Parsed_Lead_Status_History"
 
-# --- THIS IS THE FIX: Read weights directly from session state ---
 weights = {
-    "Qual to Enrollment %": st.session_state.w_qual_to_enroll,
-    "ICF to Enrollment %": st.session_state.w_icf_to_enroll,
-    "Qual -> ICF %": st.session_state.w_qual_to_icf,
-    "Avg TTC (Days)": st.session_state.w_avg_ttc,
-    "Site Screen Fail %": st.session_state.w_site_sf,
-    "StS -> Appt %": st.session_state.w_sts_appt,
-    "Appt -> ICF %": st.session_state.w_appt_icf,
-    "Lag Qual -> ICF (Days)": st.session_state.w_lag_q_icf,
-    "Screen Fail % (from ICF)": st.session_state.w_generic_sf,
-    "Projection Lag (Days)": st.session_state.w_proj_lag,
+    "StS to Enrollment %": st.session_state.w_site_sts_to_enr,
+    "ICF to Enrollment %": st.session_state.w_site_icf_to_enroll,
+    "StS to ICF %": st.session_state.w_site_sts_to_icf,
+    "StS to Appt %": st.session_state.w_site_sts_appt,
+    "StS Contact Rate %": st.session_state.w_site_contact_rate,
+    "Average time to first site action": st.session_state.w_site_avg_time_to_first_action,
+    "Avg time from StS to Appt Sched.": st.session_state.w_site_lag_sts_appt,
+    "Avg. Time Between Site Contacts": st.session_state.w_site_avg_time_between_contacts,
+    "Avg time from StS to ICF": st.session_state.w_site_lag_sts_icf,
+    "Total Referrals Awaiting First Site Action": st.session_state.w_site_awaiting_action,
+    "SF or Lost After ICF %": st.session_state.w_site_icf_to_lost,
+    "StS to Lost %": st.session_state.w_site_sts_to_lost,
+    'Qualified to Enrollment %': st.session_state.w_site_qual_to_enroll,
+    'Qualified to ICF %': st.session_state.w_site_qual_to_icf,
 }
-# --- END OF FIX ---
 
 # --- Configure the Gemini API ---
 try:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+    model = genai.GenerativeModel('gemini-flash-latest')
 except Exception as e:
     st.error("Error configuring the AI model. Have you set your GEMINI_API_KEY in Streamlit's secrets?")
     st.exception(e)
@@ -74,7 +74,6 @@ def get_df_info(df):
 
 @st.cache_data
 def get_coder_prompt(_df_info, _ts_col_map_str, _site_perf_info, _utm_perf_info):
-    # This is the final, most robust version of the prompt, using a Chain-of-Thought example.
     prompt_parts = [
         "You are an expert Python data analyst. Your goal is to answer a user's question by generating a 'Thought' process and then the `Code` to execute it.",
         "\n--- RESPONSE FORMAT ---",
@@ -144,9 +143,11 @@ if user_prompt := st.chat_input("Ask a question about your data..."):
         st.markdown(user_prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Pre-calculating business reports and forming a plan..."):
-            site_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'Site', 'Unassigned Site')
-            utm_perf_df = calculate_grouped_performance_metrics(df, ordered_stages, ts_col_map, 'UTM Source', 'Unclassified Source')
+        with st.spinner("Accessing business reports and forming a plan..."):
+            # --- FIX: Read the pre-calculated DataFrames directly from session state ---
+            site_perf_df = st.session_state.enhanced_site_metrics_df
+            utm_perf_df = st.session_state.enhanced_ad_source_metrics_df
+            
             site_perf_info = get_df_info(site_perf_df)
             utm_perf_info = get_df_info(utm_perf_df)
             

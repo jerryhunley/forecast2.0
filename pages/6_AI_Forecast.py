@@ -39,6 +39,7 @@ weights = st.session_state.get("weights_normalized", {})
 with st.container(border=True):
     st.subheader("Define Your Goals & Assumptions")
     
+    # --- Goal Settings ---
     c1, c2, c3 = st.columns(3)
     with c1:
         goal_lpi_date = st.date_input("Target LPI Date", value=datetime.now() + pd.DateOffset(months=12))
@@ -49,6 +50,7 @@ with st.container(border=True):
 
     st.divider()
     
+    # --- Model Assumption Settings ---
     st.markdown("##### Global Model Assumptions")
     a1, a2, a3, a4 = st.columns(4)
     proj_horizon = a1.number_input("Projection Horizon (Months)", 1, 48, 12)
@@ -59,6 +61,7 @@ with st.container(border=True):
         
     st.divider()
 
+    # --- Lag and Rate Assumptions ---
     st.markdown("##### Lag & Conversion Rate Assumptions")
     lag_method = st.radio(
         "ICF Landing Lag Assumption:",
@@ -95,9 +98,15 @@ with st.container(border=True):
         f"{STAGE_APPOINTMENT_SCHEDULED} -> {STAGE_SIGNED_ICF}": cr4.slider("AI: Appt -> ICF %", 0.0, 100.0, 60.0, format="%.1f%%", key='ai_cr_ai') / 100.0
     }
 
+# --- THIS IS THE RESTORED SITE CONFIGURATION BLOCK ---
 with st.expander("Optional Site Configurations"):
     site_activity_schedule = {}
+    site_caps = {}
+
     if site_metrics is not None and not site_metrics.empty:
+        # --- Site Activation/Deactivation ---
+        st.markdown("##### Site Activation/Deactivation Dates")
+        st.caption("Define when sites are active for QL allocation. Leave blank if always active.")
         site_activity_df_data = [{"Site": s, "Activation Date": None, "Deactivation Date": None} for s in site_metrics['Site'].unique()]
         edited_activity_df = st.data_editor(pd.DataFrame(site_activity_df_data), hide_index=True, use_container_width=True, key="site_activity_editor")
         for _, row in edited_activity_df.iterrows():
@@ -105,6 +114,46 @@ with st.expander("Optional Site Configurations"):
                 'activation_period': pd.Period(row['Activation Date'], 'M') if pd.notna(row['Activation Date']) else None,
                 'deactivation_period': pd.Period(row['Deactivation Date'], 'M') if pd.notna(row['Deactivation Date']) else None,
             }
+        
+        st.divider()
+
+        # --- THIS IS THE CORRECTED AND COMPLETE SITE CAPS BLOCK ---
+        st.markdown("##### Monthly Qual Capacity by Site")
+        st.caption("Set a maximum number of 'Passed Online Form' (POF) leads a site can handle per month. Leave blank for no cap.")
+        
+        # 1. Pre-calculate the historical average POF per site per month
+        avg_monthly_pof_per_site = {}
+        pof_ts_col = ts_col_map.get(STAGE_PASSED_ONLINE_FORM)
+        if pof_ts_col and pof_ts_col in processed_data.columns and 'Site' in processed_data.columns:
+            # Filter for valid POF events and group by site and month
+            monthly_counts = processed_data.dropna(subset=[pof_ts_col]).groupby(['Site', 'Submission_Month']).size().reset_index(name='Count')
+            # Calculate the average of the monthly counts for each site
+            avg_counts = monthly_counts.groupby('Site')['Count'].mean().round(0).astype(int).to_dict()
+            avg_monthly_pof_per_site = avg_counts
+
+        # 2. Prepare the DataFrame for the data_editor
+        site_caps_data_list = []
+        for site_name in site_metrics['Site'].unique():
+            site_caps_data_list.append({
+                "Site": site_name,
+                "Historical Avg. Monthly POF": avg_monthly_pof_per_site.get(site_name, 0),
+                "Monthly POF Cap": np.nan # Use numpy NaN for an empty number cell
+            })
+        
+        # 3. Create the data_editor with the pre-calculated averages
+        edited_caps_df = st.data_editor(
+            pd.DataFrame(site_caps_data_list),
+            column_config={
+                "Site": st.column_config.TextColumn(disabled=True),
+                "Historical Avg. Monthly POF": st.column_config.NumberColumn(format="%d", disabled=True, help="The historical average number of Qualified Leads this site received per month."),
+                "Monthly POF Cap": st.column_config.NumberColumn(min_value=0, step=1, format="%d")
+            },
+            hide_index=True, use_container_width=True, key="site_caps_editor"
+        )
+        for _, row in edited_caps_df.iterrows():
+            if pd.notna(row['Monthly POF Cap']):
+                site_caps[row['Site']] = int(row['Monthly POF Cap'])
+        # --- END OF CORRECTED BLOCK ---
     else:
         st.info("No site data available to configure.")
 
@@ -136,13 +185,11 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
             goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
             icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
             ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
-            site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input={},
+            site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, 
+            site_caps_input=site_caps, # Pass the site caps
             site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
             cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-            run_mode="primary",
-            # --- THIS IS THE FIX ---
-            ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
-            # ----------------------
+            run_mode="primary", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
             ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
             baseline_monthly_ql_volume_override=baseline_ql_volume
         )
@@ -159,13 +206,11 @@ if st.button("🚀 Generate Auto Forecast", type="primary", use_container_width=
                 goal_lpi_date_dt_orig=datetime.combine(goal_lpi_date, datetime.min.time()), goal_icf_number_orig=goal_icf_num, estimated_cpql_user=base_cpql,
                 icf_variation_percent=icf_variation, processed_df=processed_data, ordered_stages=ordered_stages,
                 ts_col_map=ts_col_map, effective_projection_conv_rates=effective_rates, avg_overall_lag_days=avg_pof_icf_lag,
-                site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, site_caps_input={},
+                site_metrics_df=site_metrics, projection_horizon_months=proj_horizon, 
+                site_caps_input=site_caps, # Pass the site caps
                 site_activity_schedule=site_activity_schedule, site_scoring_weights_for_ai=weights,
                 cpql_inflation_factor_pct=cpql_inflation, ql_vol_increase_threshold_pct=ql_vol_threshold,
-                run_mode="best_case_extended_lpi",
-                # --- THIS IS THE FIX ---
-                ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
-                # ----------------------
+                run_mode="best_case_extended_lpi", ai_monthly_ql_capacity_multiplier=ql_capacity_multiplier,
                 ai_lag_method=lag_method, ai_lag_p25_days=p25_lag, ai_lag_p50_days=p50_lag, ai_lag_p75_days=p75_lag,
                 baseline_monthly_ql_volume_override=baseline_ql_volume
             )
