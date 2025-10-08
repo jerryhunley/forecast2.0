@@ -5,14 +5,12 @@ from datetime import datetime
 import io
 import os
 
-# Utility and Constant Imports
 from parsing import parse_funnel_definition
 from processing import preprocess_referral_data
-from calculations import calculate_overall_inter_stage_lags, calculate_site_metrics
+from calculations import calculate_overall_inter_stage_lags, calculate_enhanced_site_metrics, calculate_enhanced_ad_metrics
 from constants import *
 from helpers import format_performance_df
 
-# --- Page Configuration ---
 st.set_page_config(
     page_title="Recruitment Forecasting Tool",
     page_icon="assets/favicon.png", 
@@ -22,12 +20,27 @@ st.set_page_config(
 # --- Session State Initialization ---
 required_keys = [
     'data_processed_successfully', 'referral_data_processed', 'funnel_definition',
-    'ordered_stages', 'ts_col_map', 'site_metrics_calculated', 'inter_stage_lags',
+    'ordered_stages', 'ts_col_map', 'inter_stage_lags',
     'historical_spend_df', 'ad_spend_input_dict',
-    # --- NEW: Initialize weight keys here ---
-    'w_qual_to_enroll', 'w_icf_to_enroll', 'w_qual_to_icf', 'w_avg_ttc',
-    'w_site_sf', 'w_sts_appt', 'w_appt_icf', 'w_lag_q_icf',
-    'w_generic_sf', 'w_proj_lag'
+    
+    # Pre-calculated DataFrames
+    'enhanced_site_metrics_df', 'enhanced_ad_source_metrics_df', 'enhanced_ad_combo_metrics_df',
+
+    # Site Scoring Weights
+    'w_site_qual_to_enroll', 'w_site_icf_to_enroll', 'w_site_qual_to_icf',
+    'w_site_awaiting_action', 'w_site_avg_time_between_contacts', 'w_site_contact_rate',
+    'w_site_sts_to_icf', 'w_site_sts_to_enr', 'w_site_sts_to_lost', 'w_site_sts_appt',
+    'w_site_icf_to_lost', 'w_site_lag_sts_appt', 'w_site_lag_sts_icf',
+    'w_site_lag_sts_enr', 'w_site_qual_to_sts', 'w_site_qual_to_appt',
+    'w_site_avg_time_to_first_action',
+
+    # Ad Scoring Weights
+    'w_ad_qual_to_enroll', 'w_ad_icf_to_enroll', 'w_ad_qual_to_icf', 'w_ad_sts_to_appt',
+    'w_ad_awaiting_action', 'w_ad_avg_time_between_contacts', 'w_ad_contact_rate',
+    'w_ad_sts_to_icf', 'w_ad_sts_to_enr', 'w_ad_sts_to_lost',
+    'w_ad_icf_to_lost', 'w_ad_lag_sts_appt', 'w_ad_lag_sts_icf',
+    'w_ad_lag_sts_enr', 'w_ad_qual_to_sts', 'w_ad_qual_to_appt',
+    'w_ad_avg_time_to_first_action', 'w_ad_generic_sf'
 ]
 default_values = {
     'data_processed_successfully': False,
@@ -35,10 +48,25 @@ default_values = {
         {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=2)).strftime('%Y-%m'), 'Historical Spend': 45000.0},
         {'Month (YYYY-MM)': (datetime.now() - pd.DateOffset(months=1)).strftime('%Y-%m'), 'Historical Spend': 60000.0}
     ]),
-    # --- NEW: Default values for all weights ---
-    'w_qual_to_enroll': 10, 'w_icf_to_enroll': 10, 'w_qual_to_icf': 20, 'w_avg_ttc': 10,
-    'w_site_sf': 5, 'w_sts_appt': 15, 'w_appt_icf': 15, 'w_lag_q_icf': 5,
-    'w_generic_sf': 5, 'w_proj_lag': 0
+    'enhanced_site_metrics_df': pd.DataFrame(),
+    'enhanced_ad_source_metrics_df': pd.DataFrame(),
+    'enhanced_ad_combo_metrics_df': pd.DataFrame(),
+    
+    # Site Defaults
+    'w_site_qual_to_enroll': 10, 'w_site_icf_to_enroll': 10, 'w_site_qual_to_icf': 20,
+    'w_site_awaiting_action': 5, 'w_site_avg_time_between_contacts': 10, 'w_site_contact_rate': 10,
+    'w_site_sts_to_icf': 15, 'w_site_sts_to_enr': 20, 'w_site_sts_to_lost': 5, 'w_site_sts_appt': 15,
+    'w_site_icf_to_lost': 5, 'w_site_lag_sts_appt': 10, 'w_site_lag_sts_icf': 5,
+    'w_site_lag_sts_enr': 0, 'w_site_qual_to_sts': 0, 'w_site_qual_to_appt': 0,
+    'w_site_avg_time_to_first_action': 10,
+
+    # Ad Defaults
+    'w_ad_qual_to_enroll': 10, 'w_ad_icf_to_enroll': 10, 'w_ad_qual_to_icf': 20,
+    'w_ad_awaiting_action': 5, 'w_ad_avg_time_between_contacts': 10, 'w_ad_contact_rate': 10,
+    'w_ad_sts_to_icf': 15, 'w_ad_sts_to_enr': 20, 'w_ad_sts_to_lost': 5, 'w_ad_sts_to_appt': 15,
+    'w_ad_icf_to_lost': 5, 'w_ad_lag_sts_appt': 10, 'w_ad_lag_sts_icf': 5,
+    'w_ad_lag_sts_enr': 0, 'w_ad_qual_to_sts': 0, 'w_ad_qual_to_appt': 0,
+    'w_ad_avg_time_to_first_action': 10, 'w_ad_generic_sf': 10,
 }
 for key in required_keys:
     if key not in st.session_state:
@@ -85,7 +113,7 @@ st.header("Home & Data Setup")
 
 if uploaded_referral_file and uploaded_funnel_def_file:
     if st.button("Process Uploaded Data", type="primary", use_container_width=True):
-        with st.spinner("Parsing files and processing data..."):
+        with st.spinner("Parsing files and processing data... This may take a moment."):
             try:
                 referral_bytes_data = uploaded_referral_file.getvalue()
                 header_df = pd.read_csv(io.BytesIO(referral_bytes_data), nrows=0, low_memory=False)
@@ -99,16 +127,27 @@ if uploaded_referral_file and uploaded_funnel_def_file:
                 funnel_def, ordered_st, ts_map = parse_funnel_definition(uploaded_funnel_def_file)
                 
                 if funnel_def and ordered_st and ts_map:
-                    raw_df = pd.read_csv(io.BytesIO(referral_bytes_data))
+                    raw_df = pd.read_csv(io.BytesIO(referral_bytes_data), low_memory=False)
                     processed_data = preprocess_referral_data(raw_df, funnel_def, ordered_st, ts_map)
 
                     if processed_data is not None and not processed_data.empty:
+                        # --- CENTRALIZED CALCULATIONS ---
                         st.session_state.funnel_definition = funnel_def
                         st.session_state.ordered_stages = ordered_st
                         st.session_state.ts_col_map = ts_map
                         st.session_state.referral_data_processed = processed_data
+                        
+                        # Calculate and store all primary dataframes in session state
                         st.session_state.inter_stage_lags = calculate_overall_inter_stage_lags(processed_data, ordered_st, ts_map)
-                        st.session_state.site_metrics_calculated = calculate_site_metrics(processed_data, ordered_st, ts_map)
+                        
+                        st.session_state.enhanced_site_metrics_df = calculate_enhanced_site_metrics(processed_data, ordered_st, ts_map, "Parsed_Lead_Status_History")
+
+                        st.session_state.enhanced_ad_source_metrics_df = calculate_enhanced_ad_metrics(processed_data, ordered_st, ts_map, "UTM Source", "Unclassified Source")
+                        
+                        df_for_combo = processed_data.copy()
+                        df_for_combo['UTM Source/Medium'] = df_for_combo['UTM Source'].astype(str).fillna("Unclassified") + ' / ' + df_for_combo['UTM Medium'].astype(str).fillna("Unclassified")
+                        st.session_state.enhanced_ad_combo_metrics_df = calculate_enhanced_ad_metrics(df_for_combo, ordered_st, ts_map, "UTM Source/Medium", "Unclassified Combo")
+
                         st.session_state.data_processed_successfully = True
                         st.success("Data processed successfully!")
                         st.rerun()
